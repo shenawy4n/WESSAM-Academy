@@ -1,0 +1,559 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState } from 'react';
+import { LocaleProvider, useLocale } from './hooks/useLocale';
+import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import { isSupabaseConfigured } from './lib/supabase/client';
+import { ConfigErrorScreen } from './features/auth/ConfigErrorScreen';
+import { LoginScreen } from './features/auth/LoginScreen';
+import { UnauthorizedScreen } from './features/auth/UnauthorizedScreen';
+import { AppLayout } from './components/layout/AppLayout';
+import { TeacherDashboard } from './features/dashboard/TeacherDashboard';
+import { StudentDashboard } from './features/dashboard/StudentDashboard';
+import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
+import { TeacherView, StudentView } from './types/navigation';
+import {
+  Users,
+  FolderGit2,
+  BookOpen,
+  FileText,
+  Video,
+  Radio,
+  UserCheck,
+  HelpCircle,
+  FileQuestion,
+  ClipboardList,
+  CheckSquare,
+  Award,
+  BarChart3,
+  Bell,
+  Settings,
+  User,
+  PlayCircle,
+  Home,
+} from 'lucide-react';
+
+function AppContent() {
+  const { t, isRtl } = useLocale();
+  const { user, role, isLoading } = useAuth();
+  const isConfigured = isSupabaseConfigured();
+
+  const [previewBypass, setPreviewBypass] = useState<boolean>(false);
+  const [currentTeacherView, setCurrentTeacherView] = useState<TeacherView>('dashboard');
+  const [currentStudentView, setCurrentStudentView] = useState<StudentView>('home');
+
+  // If Supabase environment is missing and user has not clicked inspection mode
+  if (!isConfigured && !previewBypass) {
+    return <ConfigErrorScreen onBypassToPreview={() => setPreviewBypass(true)} />;
+  }
+
+  // Prevent flicker or momentary display of unauthenticated screens while session resolves
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F4F6FA] flex flex-col items-center justify-center p-6 text-center">
+        <LoadingSpinner size="lg" label={t.common.loading} />
+      </div>
+    );
+  }
+
+  // If user is not authenticated yet
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  // Teacher & Super Admin Portal
+  if (role === 'teacher' || role === 'super_admin') {
+    const getPageTitle = (view: TeacherView): string => {
+      switch (view) {
+        case 'dashboard':
+          return t.navigation.dashboard;
+        case 'students':
+          return t.navigation.students;
+        case 'groups':
+          return t.navigation.groups;
+        case 'courses':
+          return t.navigation.courses;
+        case 'lessons':
+          return t.navigation.lessons;
+        case 'video':
+          return t.navigation.videoLibrary;
+        case 'live-sessions':
+          return t.navigation.liveClasses;
+        case 'attendance':
+          return t.navigation.attendance;
+        case 'question-bank':
+          return t.navigation.questionBank;
+        case 'quizzes':
+          return t.navigation.quizzesExams;
+        case 'assignments':
+          return t.navigation.assignments;
+        case 'submissions':
+          return t.navigation.submissionsGrading;
+        case 'results':
+          return t.navigation.results;
+        case 'analytics':
+          return t.navigation.analytics;
+        case 'notifications':
+          return t.navigation.notifications;
+        case 'settings':
+          return t.navigation.settings;
+        default:
+          return t.navigation.dashboard;
+      }
+    };
+
+    const renderTeacherView = () => {
+      switch (currentTeacherView) {
+        case 'dashboard':
+          return <TeacherDashboard onNavigate={(v) => setCurrentTeacherView(v as TeacherView)} />;
+
+        case 'students':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.students}
+              subtitle={isRtl ? 'إدارة سجلات الطلاب، الحسابات، وأرقام الهوية الأكاديمية' : 'Student records, accounts, and academic IDs'}
+              targetPhase="Phase 2 — Identity & Student Management"
+              icon={Users}
+              description={isRtl ? 'سيتم إطلاق محرك تسجيل الطلاب وإنشاء هويات تسجيل الدخول الآمنة عبر Edge Function في المرحلة الثانية.' : 'Student provisioning engine and secure Edge Function username-login mapping will be implemented in Phase 2.'}
+              plannedCapabilities={[
+                isRtl ? 'إنشاء حسابات الطلاب باسم المستخدم وكلمة المرور' : 'Username and password student provisioning',
+                isRtl ? 'ربط الطلاب بالمجموعات الدراسية' : 'Group cohort assignment',
+                isRtl ? 'تفعيل وتعطيل الحسابات بضغطة زر' : 'Instant activation and suspension controls',
+                isRtl ? 'استعراض السجل الأكاديمي التفصيلي لكل طالب' : 'Comprehensive academic transcript per student',
+              ]}
+            />
+          );
+
+        case 'groups':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.groups}
+              subtitle={isRtl ? 'المجموعات الدراسية والفصول الأكاديمية' : 'Academic cohorts and group cohorts'}
+              targetPhase="Phase 2 — Identity & Student Management"
+              icon={FolderGit2}
+              description={isRtl ? 'إدارة المجموعات، توزيع الطلاب، وتعيين المقررات الدراسية الخاصة بكل مجموعة.' : 'Group administration, cohort enrollment, and group-course assignments.'}
+              plannedCapabilities={[
+                isRtl ? 'إنشاء مجموعات دراسية حسب المراحل والمستويات' : 'Create groups categorized by level & academic year',
+                isRtl ? 'ربط المقررات والحصص بالمجموعات' : 'Assign courses and live sessions per group',
+                isRtl ? 'التحكم بالحد الأقصى للطلاب في كل مجموعة' : 'Manage student capacity per cohort',
+              ]}
+            />
+          );
+
+        case 'courses':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.courses}
+              subtitle={isRtl ? 'مناهج ودورات اللغة الإنجليزية' : 'English curricula and learning tracks'}
+              targetPhase="Phase 3 — Courses & Learning"
+              icon={BookOpen}
+              description={isRtl ? 'بناء المناهج التعليمية، وحدات الدروس، وربطها بالمجموعات الدراسية.' : 'Curriculum builder, course units, and group access permissions.'}
+              plannedCapabilities={[
+                isRtl ? 'إنشاء وتعديل المقررات الدراسية' : 'Course creation and curriculum authoring',
+                isRtl ? 'نشر وإخفاء المقررات حسب المجموعات' : 'Publishing controls and cohort visibility',
+                isRtl ? 'تقسيم المقررات إلى وحدات ودروس مرتبة' : 'Structured units and ordered lessons',
+              ]}
+            />
+          );
+
+        case 'lessons':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.lessons}
+              subtitle={isRtl ? 'وحدات الدروس والمحتوى التعليمي' : 'Lesson modules and educational resources'}
+              targetPhase="Phase 3 — Courses & Learning"
+              icon={FileText}
+              description={isRtl ? 'إدارة محتوى الدروس، المذكرات، والملفات المرفقة.' : 'Lesson content editor, lecture handouts, and attached learning files.'}
+              plannedCapabilities={[
+                isRtl ? 'إرفاق المستندات والملفات التعليمية للتحميل' : 'Attach downloadable lesson materials',
+                isRtl ? 'التحكم في تسلسل وترتيب الدروس' : 'Sequential lesson ordering and access rules',
+                isRtl ? 'متابعة نسبة إنجاز الطلاب لكل درس' : 'Track individual lesson completion status',
+              ]}
+            />
+          );
+
+        case 'video':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.videoLibrary}
+              subtitle={isRtl ? 'مكتبة الفيديوهات التعليمية المسجلة' : 'Recorded lecture library'}
+              targetPhase="Phase 3 — Courses & Learning"
+              icon={Video}
+              description={isRtl ? 'إدارة الفيديوهات المسجلة عبر المزود السحابي مع روابط تشغيل موثقة ومحمية بسيرفر الموقع.' : 'Video provider abstraction (prepared for Mux) with signed server-side playback authorization.'}
+              plannedCapabilities={[
+                isRtl ? 'تخزين بيانات الفيديو وروابط التشغيل الموقعة' : 'Signed URL playback tokens without client secrets',
+                isRtl ? 'التحقق من أحقية الطالب قبل إصدار رمز المشاهدة' : 'Server authorization verification before streaming',
+                isRtl ? 'تتبع فترات المشاهدة والإكمال' : 'Playback engagement and progress logging',
+              ]}
+            />
+          );
+
+        case 'live-sessions':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.liveClasses}
+              subtitle={isRtl ? 'الحصص التفاعلية المباشرة (Zoom / Google Meet)' : 'Interactive live classes'}
+              targetPhase="Phase 4 — Live Classes & Attendance"
+              icon={Radio}
+              description={isRtl ? 'جدولة الحصص المباشرة بتوقيت مكة المكرمة وتوجيه الروابط للطلاب المصرح لهم فقط.' : 'Schedule live interactive classes in Asia/Riyadh timezone with cohort-restricted meeting links.'}
+              plannedCapabilities={[
+                isRtl ? 'جدولة الحصص حسب توقيت المملكة (Asia/Riyadh)' : 'Schedule sessions in Asia/Riyadh timezone',
+                isRtl ? 'حصر الروابط للمجموعات المستهدفة فقط' : 'Restrict meeting links to authorized students',
+                isRtl ? 'ربط الحصص بسجل الحضور التلقائي واليدوي' : 'Link sessions to academic attendance records',
+              ]}
+            />
+          );
+
+        case 'attendance':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.attendance}
+              subtitle={isRtl ? 'سجل حضور وغياب الطلاب' : 'Student attendance registry'}
+              targetPhase="Phase 4 — Live Classes & Attendance"
+              icon={UserCheck}
+              description={isRtl ? 'رصد وتوثيق الحضور والغياب للحصص التفاعلية، مع تقارير التزام الطالب.' : 'Track presence, absence, late arrivals, and excuses for live sessions.'}
+              plannedCapabilities={[
+                isRtl ? 'رصد سريع لحضور المجموعة في ثوانٍ' : 'Rapid roster roll-call',
+                isRtl ? 'سجل تاريخي غير قابل للتعديل من الطلاب' : 'Immutable attendance logs protected via RLS',
+                isRtl ? 'إحصائيات ونسب الالتزام بالحضور' : 'Attendance compliance percentages',
+              ]}
+            />
+          );
+
+        case 'question-bank':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.questionBank}
+              subtitle={isRtl ? 'بنك أسئلة اللغة الإنجليزية وقواعدها' : 'English question bank & grammar repository'}
+              targetPhase="Phase 5 — Assessments"
+              icon={HelpCircle}
+              description={isRtl ? 'بنك شامل لأسئلة القواعد، المفردات، الفهم، والاستماع لتكوين الاختبارات.' : 'Comprehensive repository for grammar, vocabulary, reading, and listening questions.'}
+              plannedCapabilities={[
+                isRtl ? 'دعم الأسئلة متعددة الاختيارات، صح/خطأ، إعادة الترتيب وإكمال الفراغ' : 'Multiple Choice, True/False, Fill in Blank, Sentence Ordering',
+                isRtl ? 'تصنيف الأسئلة حسب المهارة ومستوى الصعوبة' : 'Categorize by skill, topic, and difficulty',
+                isRtl ? 'توليد اختبارات عشوائية من البنك' : 'Dynamic question selection from bank',
+              ]}
+            />
+          );
+
+        case 'quizzes':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.quizzesExams}
+              subtitle={isRtl ? 'الاختبارات والتقييمات الدورية' : 'Quizzes, midterms, and examinations'}
+              targetPhase="Phase 5 — Assessments"
+              icon={FileQuestion}
+              description={isRtl ? 'إنشاء الاختبارات المؤقتة مع أخذ لقطة غير قابلة للتغيير للأسئلة عند بدء الطالب للمحاولة.' : 'Timed assessments with question snapshots ensuring integrity even if original questions change.'}
+              plannedCapabilities={[
+                isRtl ? 'لقطات ثابتة للأسئلة عند بدء المحاولة' : 'Immutable question snapshots on attempt start',
+                isRtl ? 'تحديد مدة الاختبار وعدد المحاولات' : 'Configurable duration and attempt limits',
+                isRtl ? 'تصحيح تلقائي فوري وحجب الإجابات حتى الموعد المحدد' : 'Automatic grading with delayed answer release',
+              ]}
+            />
+          );
+
+        case 'assignments':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.assignments}
+              subtitle={isRtl ? 'الواجبات والتطبيقات المنزلية' : 'Coursework and homework tasks'}
+              targetPhase="Phase 5 — Assessments"
+              icon={ClipboardList}
+              description={isRtl ? 'تكليف الطلاب بالواجبات مع تحديد مواعيد التسليم ورفع الملفات والتوجيهات.' : 'Homework assignment desk with deadlines, instructions, and file submissions.'}
+              plannedCapabilities={[
+                isRtl ? 'تحديد مواعيد التسليم النهائية بدقة' : 'Enforce precise due dates and late flags',
+                isRtl ? 'إرفاق نماذج وتوجيهات الحل' : 'Attach assignment guidelines and rubrics',
+                isRtl ? 'تعيين الواجب لمجموعة أو لطلاب محددين' : 'Target groups or individual students',
+              ]}
+            />
+          );
+
+        case 'submissions':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.submissionsGrading}
+              subtitle={isRtl ? 'مركز التدقيق وتصحيح أعمال الطلاب' : 'Grading and submission evaluation desk'}
+              targetPhase="Phase 5 — Assessments"
+              icon={CheckSquare}
+              description={isRtl ? 'مراجعة حلول الطلاب، رصد الدرجات، وكتابة الملاحظات التعليمية والتوجيهات.' : 'Review student submissions, award scores, and provide teacher feedback.'}
+              plannedCapabilities={[
+                isRtl ? 'استعراض ملفات وحلول الطلاب' : 'View student answers and submitted files',
+                isRtl ? 'رصد الدرجات وإرسال الملاحظات الفردية' : 'Input scores and individualized teacher feedback',
+                isRtl ? 'إشعار الطالب فور اعتماد النتيجة' : 'Instant notification to student upon review',
+              ]}
+            />
+          );
+
+        case 'results':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.results}
+              subtitle={isRtl ? 'السجلات الأكاديمية والدرجات الإجمالية' : 'Academic transcripts and grade records'}
+              targetPhase="Phase 6 — Analytics & Finalization"
+              icon={Award}
+              description={isRtl ? 'سجل أكاديمي شامل لكل طالب يوثق الحضور، الواجبات، والاختبارات عبر الفصول.' : 'Comprehensive academic record keeping for student transcripts, attendance, and exam history.'}
+              plannedCapabilities={[
+                isRtl ? 'تقارير درجات مجمعة قابلة للطباعة والتصدير' : 'Aggregated printable grade reports',
+                isRtl ? 'سجل تاريخي غير قابل للتعديل' : 'Audit-protected academic history',
+                isRtl ? 'تتبع تطور مستوى الطالب على مدار العام' : 'Year-over-year proficiency progress tracking',
+              ]}
+            />
+          );
+
+        case 'analytics':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.analytics}
+              subtitle={isRtl ? 'مؤشرات الأداء وتحليلات التعلم' : 'Performance analytics and cohort insights'}
+              targetPhase="Phase 6 — Analytics & Finalization"
+              icon={BarChart3}
+              description={isRtl ? 'رسوم بيانية حقيقية توضح التزام المجموعات ونقاط القوة والضعف في مهارات اللغة الإنجليزية.' : 'Real database analytics evaluating cohort engagement and language skill breakdowns.'}
+              plannedCapabilities={[
+                isRtl ? 'تحليل نسب إتقان المهارات (القواعد، المفردات، القراءة)' : 'Skill proficiency analytics (Grammar, Vocab, Reading)',
+                isRtl ? 'معدلات الحضور والتسليم في الموعد' : 'Attendance and on-time submission ratios',
+                isRtl ? 'كشف الطلاب الذين يحتاجون إلى متابعة إضافية' : 'Early identification of struggling students',
+              ]}
+            />
+          );
+
+        case 'notifications':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.notifications}
+              subtitle={isRtl ? 'مركز الإشعارات والتنبيهات الموجهة' : 'Academy broadcast and student notification desk'}
+              targetPhase="Phase 6 — Analytics & Finalization"
+              icon={Bell}
+              description={isRtl ? 'إرسال التنبيهات العامة للمجموعات أو التنبيهات الفردية للحصص المباشرة ومواعيد الاختبارات.' : 'Internal notification system for general announcements, cohort broadcasts, and exam reminders.'}
+              plannedCapabilities={[
+                isRtl ? 'إرسال إعلانات عامة للأكاديمية' : 'General academy broadcast announcements',
+                isRtl ? 'إشعارات آلية بمواعيد الحصص المباشرة' : 'Automated live class schedule reminders',
+                isRtl ? 'تتبع قراءة الإشعارات من الطلاب' : 'Read/unread status per recipient',
+              ]}
+            />
+          );
+
+        case 'settings':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.settings}
+              subtitle={isRtl ? 'إعدادات المنصة والهوية الأكاديمية' : 'Academy system configuration'}
+              targetPhase="Phase 6 — Analytics & Finalization"
+              icon={Settings}
+              description={isRtl ? 'إدارة بيانات الأكاديمية، العام الدراسي، وإعدادات الربط التقني.' : 'Manage academy information, academic year configuration, and provider integrations.'}
+              plannedCapabilities={[
+                isRtl ? 'تحديث بيانات أكاديمية الوسام' : 'WESSAM Academy branding configuration',
+                isRtl ? 'سجل العمليات الإدارية (Audit Logs)' : 'Audit logs of administrative actions',
+                isRtl ? 'التحكم في مزودي الفيديو والحصص المباشرة' : 'Manage video and meeting provider endpoints',
+              ]}
+            />
+          );
+
+        default:
+          return <TeacherDashboard onNavigate={(v) => setCurrentTeacherView(v as TeacherView)} />;
+      }
+    };
+
+    return (
+      <AppLayout
+        currentView={currentTeacherView}
+        onSelectView={(v) => setCurrentTeacherView(v as TeacherView)}
+        pageTitle={getPageTitle(currentTeacherView)}
+      >
+        {renderTeacherView()}
+      </AppLayout>
+    );
+  }
+
+  // Student Portal
+  if (role === 'student') {
+    const getPageTitle = (view: StudentView): string => {
+      switch (view) {
+        case 'home':
+          return t.navigation.home;
+        case 'courses':
+          return t.navigation.myCourses;
+        case 'lessons':
+          return t.navigation.lessons;
+        case 'live-sessions':
+          return t.navigation.liveClasses;
+        case 'assignments':
+          return t.navigation.assignments;
+        case 'quizzes':
+          return t.navigation.quizzesExams;
+        case 'results':
+          return t.navigation.results;
+        case 'notifications':
+          return t.navigation.notifications;
+        case 'profile':
+          return t.navigation.myProfile;
+        default:
+          return t.navigation.home;
+      }
+    };
+
+    const renderStudentView = () => {
+      switch (currentStudentView) {
+        case 'home':
+          return <StudentDashboard onNavigate={(v) => setCurrentStudentView(v as StudentView)} />;
+
+        case 'courses':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.myCourses}
+              subtitle={isRtl ? 'المناهج والدورات المسجلة لمجموعتك' : 'Enrolled courses for your group'}
+              targetPhase="Phase 3 — Courses & Learning"
+              icon={BookOpen}
+              description={isRtl ? 'ستظهر هنا المناهج الدراسية المسندة لمجموعتك بإشراف الأستاذ وسام.' : 'Your assigned English curricula will appear here upon cohort activation.'}
+              plannedCapabilities={[
+                isRtl ? 'استعراض وحدات المنهج والدروس' : 'Browse course units and lesson outlines',
+                isRtl ? 'تحميل الملخصات والمذكرات التدريبية' : 'Download class handouts and study sheets',
+                isRtl ? 'متابعة نسبة إنجازك الأكاديمي' : 'Real-time completion tracking',
+              ]}
+            />
+          );
+
+        case 'lessons':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.lessons}
+              subtitle={isRtl ? 'الدروس والشروحات المسجلة' : 'Recorded lectures and lessons'}
+              targetPhase="Phase 3 — Courses & Learning"
+              icon={PlayCircle}
+              description={isRtl ? 'مشاهدة شروحات الدروس ومقاطع الفيديو التعليمية المصرح لك بالوصول إليها.' : 'Stream authorized video lessons and study materials.'}
+              plannedCapabilities={[
+                isRtl ? 'مشاهدة عالية الجودة ومحمية للمقاطع' : 'Secure streaming of video lessons',
+                isRtl ? 'تسجيل علامة اكتمال الدرس تلقائياً' : 'Automated lesson completion logging',
+                isRtl ? 'طرح الأسئلة وملاحظات الدرس' : 'Lesson notes and discussion queries',
+              ]}
+            />
+          );
+
+        case 'live-sessions':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.liveClasses}
+              subtitle={isRtl ? 'الحصص المباشرة القادمة والسابقة' : 'Live classes schedule'}
+              targetPhase="Phase 4 — Live Classes & Attendance"
+              icon={Radio}
+              description={isRtl ? 'الوصول المباشر لحصص الزوم وجوجل ميت بمجرد حلول موعد البث.' : 'Direct access to scheduled live sessions with Mr. Wessam.'}
+              plannedCapabilities={[
+                isRtl ? 'رابط الدخول المباشر للحصة' : 'One-click launch into authorized live room',
+                isRtl ? 'توقيت الحصص وفق توقيت مكة المكرمة' : 'Sessions scheduled in Asia/Riyadh time',
+                isRtl ? 'توثيق حضورك في سجل الحصة' : 'Automatic presence registration upon joining',
+              ]}
+            />
+          );
+
+        case 'assignments':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.assignments}
+              subtitle={isRtl ? 'الواجبات والتطبيقات العملية' : 'Homework and assignments'}
+              targetPhase="Phase 5 — Assessments"
+              icon={ClipboardList}
+              description={isRtl ? 'رفع الواجبات ومتابعة مواعيد التسليم النهائية وملاحظات الأستاذ وسام.' : 'Submit homework, monitor deadlines, and receive teacher feedback.'}
+              plannedCapabilities={[
+                isRtl ? 'رفع الملفات والحلول بسهولة' : 'Upload assignment response files and text',
+                isRtl ? 'متابعة حالة التسليم (في الموعد / متأخر)' : 'Track on-time or late submission status',
+                isRtl ? 'قراءة توجيهات وملاحظات الأستاذ وسام' : 'Review personalized teacher corrections',
+              ]}
+            />
+          );
+
+        case 'quizzes':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.quizzesExams}
+              subtitle={isRtl ? 'الاختبارات الدورية وتقييمات الفهم' : 'Quizzes & examinations'}
+              targetPhase="Phase 5 — Assessments"
+              icon={FileQuestion}
+              description={isRtl ? 'خوض الاختبارات الإلكترونية المؤقتة والحصول على النتيجة والتقييم.' : 'Take timed online quizzes and check your proficiency scores.'}
+              plannedCapabilities={[
+                isRtl ? 'واجهة اختبار سلسة ومؤقت تنازلي دقيق' : 'Intuitive test interface with countdown timer',
+                isRtl ? 'حفظ تلقائي للإجابات أثناء الحل' : 'Automatic continuous answer saving',
+                isRtl ? 'عرض النتيجة والمراجعة بعد انتهاء التقييم' : 'Review score and explanations once released',
+              ]}
+            />
+          );
+
+        case 'results':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.results}
+              subtitle={isRtl ? 'سجل الدرجات ومستوى الأداء' : 'Academic transcript and grades'}
+              targetPhase="Phase 6 — Analytics & Finalization"
+              icon={Award}
+              description={isRtl ? 'استعراض درجاتك في جميع الاختبارات والواجبات ونسبة الحضور.' : 'View your comprehensive grades, attendance record, and teacher praise.'}
+              plannedCapabilities={[
+                isRtl ? 'كشف درجات تفصيلي لكل مقرر' : 'Itemized course gradebook',
+                isRtl ? 'نسبة حضور الحصص المباشرة' : 'Live attendance percentage',
+                isRtl ? 'تتبع تطور مستواك في اللغة الإنجليزية' : 'Skill progression metrics over time',
+              ]}
+            />
+          );
+
+        case 'notifications':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.notifications}
+              subtitle={isRtl ? 'تنبيهات الأكاديمية وإعلانات الأستاذ' : 'Academy notifications'}
+              targetPhase="Phase 6 — Analytics & Finalization"
+              icon={Bell}
+              description={isRtl ? 'التنبيهات الخاصة بمواعيد الحصص المباشرة والواجبات الجديدة وإعلانات الأكاديمية.' : 'Important updates about live sessions, new assignments, and academy notices.'}
+              plannedCapabilities={[
+                isRtl ? 'إشعارات فورية بالواجبات الجديدة' : 'Instant alerts for newly published coursework',
+                isRtl ? 'تنبيه قبل بدء الحصة المباشرة' : 'Reminders prior to live class starts',
+                isRtl ? 'إشعار عند رصد درجات جديدة' : 'Notification upon assignment grading',
+              ]}
+            />
+          );
+
+        case 'profile':
+          return (
+            <FeaturePlaceholderView
+              title={t.navigation.myProfile}
+              subtitle={isRtl ? 'الملف الشخصي والبيانات الأكاديمية' : 'Student academic profile'}
+              targetPhase="Phase 2 — Identity & Student Management"
+              icon={User}
+              description={isRtl ? 'بياناتك الأكاديمية المسجلة، اسم المستخدم، ورقم المجموعة.' : 'Your registered student ID, username, cohort details, and academic contacts.'}
+              plannedCapabilities={[
+                isRtl ? 'عرض الرقم الأكاديمي والمجموعة' : 'View student ID and academic cohort',
+                isRtl ? 'تحديث بيانات الاتصال المصرح بها' : 'Update permitted contact details',
+                isRtl ? 'تغيير كلمة المرور بشكل آمن' : 'Secure password update through Edge Function',
+              ]}
+            />
+          );
+
+        default:
+          return <StudentDashboard onNavigate={(v) => setCurrentStudentView(v as StudentView)} />;
+      }
+    };
+
+    return (
+      <AppLayout
+        currentView={currentStudentView}
+        onSelectView={(v) => setCurrentStudentView(v as StudentView)}
+        pageTitle={getPageTitle(currentStudentView)}
+      >
+        {renderStudentView()}
+      </AppLayout>
+    );
+  }
+
+  // Fallback for unauthorized roles
+  return <UnauthorizedScreen onReturn={() => window.location.reload()} />;
+}
+
+export default function App() {
+  return (
+    <LocaleProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </LocaleProvider>
+  );
+}

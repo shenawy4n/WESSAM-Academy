@@ -1,0 +1,6 @@
+{
+  "name": "WESSAM Academy",
+  "description": "Bilingual English-learning platform for WESSAM Academy (أكاديمية الوسام التعليمية) in Saudi Arabia, managed by teacher Mr. Wessam Ibrahim Draz.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
