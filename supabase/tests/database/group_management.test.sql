@@ -69,6 +69,7 @@ SELECT extensions.throws_ok(
     false
   )$$,
   'P0003',
+  'Group capacity limit reached (1 of 1 students)',
   'enrollment rejects a full group'
 );
 RESET ROLE;
@@ -104,6 +105,7 @@ SELECT extensions.throws_ok(
     'cccccccc-cccc-4ccc-8ccc-ccccccccccc3'
   )$$,
   'P0002',
+  'Student is not enrolled in the source group',
   'transfer rejects a student absent from the source group'
 );
 SELECT extensions.lives_ok(
@@ -128,6 +130,7 @@ SELECT extensions.throws_ok(
     'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'
   )$$,
   'P0002',
+  'Student is not enrolled in the specified group',
   'removal rejects a membership that does not exist'
 );
 SELECT extensions.lives_ok(
@@ -220,6 +223,7 @@ SELECT extensions.throws_ok(
     false
   )$$,
   '42501',
+  'Unauthorized: Only teachers and super admins can manage group enrollments',
   'student role cannot call teacher-only group RPCs'
 );
 RESET ROLE;
