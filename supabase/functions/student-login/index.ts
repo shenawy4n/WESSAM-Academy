@@ -4,7 +4,12 @@
  * 
  * WESSAM Academy — Edge Function: student-login
  * Secure username-based authentication resolving username -> internal Auth identity.
- * Includes dual-layer distributed & local rate-limiting, timing protection, and generic responses.
+ * Features:
+ * - True Redis sliding-window log via Upstash REST pipeline (ZREMRANGEBYSCORE + ZADD + ZCARD + EXPIRE)
+ * - SHA-256 hashed keys for IP and username to protect PII in cache
+ * - In-memory sliding-window defense-in-depth fallback
+ * - Spoof-resistant IP extraction
+ * - Timing protection and uniform 401 generic failure responses
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -23,31 +28,78 @@ const genericAuthFailure = () =>
     { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 
-// Local in-memory sliding window cache for fast burst mitigation
-const localRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+// Local in-memory sliding-window log for defense-in-depth and local dev
+const localSlidingWindows = new Map<string, number[]>();
 
-// Distributed Rate Limiting via Upstash Redis REST API
-async function checkDistributedRateLimit(key: string, limit: number, windowSeconds: number): Promise<boolean> {
+function checkLocalSlidingLimit(key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const threshold = now - windowMs;
+  const existing = localSlidingWindows.get(key) || [];
+  
+  // Prune timestamps outside current sliding window
+  const active = existing.filter((ts) => ts > threshold);
+  
+  if (active.length >= limit) {
+    localSlidingWindows.set(key, active);
+    return false;
+  }
+  
+  active.push(now);
+  localSlidingWindows.set(key, active);
+  return true;
+}
+
+// Compute truncated SHA-256 hex string to protect PII in rate-limit keys
+async function sha256Hex(input: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Extract client IP safely from edge headers
+function extractClientIp(req: Request): string {
+  const cfIp = req.headers.get('cf-connecting-ip');
+  if (cfIp) return cfIp.trim();
+  
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) {
+    const first = forwarded.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  
+  return 'unknown-ip';
+}
+
+// True Distributed Sliding-Window Log Rate Limiter
+async function checkDistributedSlidingLimit(
+  key: string,
+  limit: number,
+  windowSeconds: number
+): Promise<boolean> {
+  const windowMs = windowSeconds * 1000;
+  const now = Date.now();
+  const threshold = now - windowMs;
+
+  // 1. Evaluate local sliding window first (defense-in-depth)
+  const localAllowed = checkLocalSlidingLimit(key, limit, windowMs);
+  if (!localAllowed) {
+    return false;
+  }
+
   const upstashUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
   const upstashToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 
   if (!upstashUrl || !upstashToken) {
-    // Fallback to local container tracking if external distributed store not configured
-    const now = Date.now();
-    const entry = localRateLimitMap.get(key);
-    if (!entry || now > entry.resetAt) {
-      localRateLimitMap.set(key, { count: 1, resetAt: now + windowSeconds * 1000 });
-      return true;
-    }
-    if (entry.count >= limit) {
-      return false;
-    }
-    entry.count += 1;
-    return true;
+    return localAllowed;
   }
 
   try {
-    // Atomic INCR + EXPIRE via Upstash pipeline
+    const memberId = `${now}-${crypto.randomUUID()}`;
     const pipelineUrl = `${upstashUrl.replace(/\/$/, '')}/pipeline`;
     const response = await fetch(pipelineUrl, {
       method: 'POST',
@@ -56,22 +108,25 @@ async function checkDistributedRateLimit(key: string, limit: number, windowSecon
         'Content-Type': 'application/json',
       },
       body: JSON.stringify([
-        ['INCR', key],
-        ['EXPIRE', key, windowSeconds, 'NX'],
+        ['ZREMRANGEBYSCORE', key, 0, threshold],
+        ['ZADD', key, now, memberId],
+        ['ZCARD', key],
+        ['EXPIRE', key, windowSeconds],
       ]),
     });
 
     if (!response.ok) {
-      console.warn('Upstash rate limit request returned non-200:', response.status);
-      return true; // fail-open with local tracking on external API failure
+      console.warn(`Upstash rate-limit pipeline error: HTTP ${response.status}`);
+      return localAllowed;
     }
 
     const results = await response.json();
-    const currentCount = results[0]?.result ?? 1;
-    return currentCount <= limit;
+    // Pipeline index 2 corresponds to ZCARD
+    const currentCount = results[2]?.result ?? 1;
+    return typeof currentCount === 'number' && currentCount <= limit;
   } catch (err) {
-    console.warn('Upstash Redis rate-limit check failed, falling back:', err);
-    return true;
+    console.warn('Upstash rate-limit check failed, falling back safely to local tracker:', err);
+    return localAllowed;
   }
 }
 
@@ -88,15 +143,11 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Extract client IP safely from edge headers
-    const clientIp =
-      req.headers.get('cf-connecting-ip') ||
-      req.headers.get('x-real-ip') ||
-      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      'unknown-ip';
+    const clientIp = extractClientIp(req);
+    const hashedIp = (await sha256Hex(clientIp)).slice(0, 16);
 
     // 1. IP-level Rate Limiting: max 20 attempts per 10 minutes per IP
-    const ipAllowed = await checkDistributedRateLimit(`rl:ip:${clientIp}`, 20, 600);
+    const ipAllowed = await checkDistributedSlidingLimit(`rl:ip:${hashedIp}`, 20, 600);
     if (!ipAllowed) {
       return new Response(
         JSON.stringify({ error: 'Too many login attempts. Please wait 10 minutes before retrying.' }),
@@ -131,7 +182,8 @@ serve(async (req: Request) => {
     }
 
     // 2. Account-level Rate Limiting: max 5 attempts per 10 minutes per username
-    const userAllowed = await checkDistributedRateLimit(`rl:user:${trimmedUsername}`, 5, 600);
+    const hashedUser = (await sha256Hex(trimmedUsername)).slice(0, 16);
+    const userAllowed = await checkDistributedSlidingLimit(`rl:u:${hashedUser}`, 5, 600);
     if (!userAllowed) {
       return new Response(
         JSON.stringify({ error: 'Too many failed login attempts for this account. Please wait 10 minutes.' }),

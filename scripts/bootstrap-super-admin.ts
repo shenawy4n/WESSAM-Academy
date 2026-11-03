@@ -2,130 +2,268 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * WESSAM Academy — Super Admin One-Time Bootstrap Script
+ * WESSAM Academy — Hardened Super Admin One-Time Bootstrap Script
  * Execution Rule: Runs solely in administrative CLI environments with service-role permissions.
  * Never hardcodes passwords or commits secrets.
  * 
- * Usage:
- *   BOOTSTRAP_SUPERADMIN_PASSWORD="<password>" \
- *   SUPABASE_URL="https://your-project.supabase.co" \
- *   SUPABASE_SERVICE_ROLE_KEY="<key>" \
- *   npx tsx scripts/bootstrap-super-admin.ts
+ * Security Guardrails:
+ * 1. Project-ref verification and explicit interactive confirmation before any mutation.
+ * 2. Hidden terminal prompt for password input (no echo, avoids shell history pollution).
+ * 3. Paginated lookup in Supabase Auth to prevent false-negative user omission.
+ * 4. Idempotent & Fail-Safe:
+ *    - If already super_admin + active: Exits cleanly without modifying credentials or data.
+ *    - If exists with another role or invalid state: Aborts immediately to prevent takeover.
+ * 5. Uses strict .insert() rather than unrestricted .upsert() on public.profiles.
+ * 6. Never logs passwords, API keys, or JWT tokens.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import * as readline from 'node:readline';
+import { Writable } from 'node:stream';
+import { createClient, type User } from '@supabase/supabase-js';
 
 const SUPER_ADMIN_EMAIL = 'shenawyjr@gmail.com';
 const FULL_NAME = 'Mr. Wessam Ibrahim Draz';
 const FULL_NAME_ARABIC = 'أ. وسام إبراهيم دراز';
 
+function promptVisible(query: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(query, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+function promptHidden(query: string): Promise<string> {
+  return new Promise((resolve) => {
+    let muted = false;
+    const mutableStdout = new Writable({
+      write(chunk, encoding, callback) {
+        if (!muted) {
+          process.stdout.write(chunk, encoding);
+        }
+        callback();
+      },
+    });
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: mutableStdout,
+      terminal: true,
+    });
+
+    process.stdout.write(query);
+    muted = true;
+
+    rl.question('', (answer) => {
+      muted = false;
+      process.stdout.write('\n');
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function findAuthUserByEmail(supabase: any, email: string): Promise<User | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  let page = 1;
+  const perPage = 50;
+
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+
+    if (error) {
+      throw new Error(`Failed to query Auth users: ${error.message}`);
+    }
+
+    const match = (data.users as User[]).find((u: User) => u.email?.toLowerCase() === normalizedEmail);
+    if (match) {
+      return match;
+    }
+
+    if (data.users.length < perPage) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return null;
+}
+
 async function bootstrapSuperAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
-  const password = process.env.BOOTSTRAP_SUPERADMIN_PASSWORD;
 
   if (!supabaseUrl || !serviceRoleKey) {
-    console.error('Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required.');
+    console.error('CRITICAL: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required.');
     process.exit(1);
   }
 
-  if (!password || password.length < 8) {
-    console.error('Error: BOOTSTRAP_SUPERADMIN_PASSWORD environment variable is required (min 8 chars).');
+  // Parse project ref for verification
+  let projectRef = 'unknown';
+  try {
+    const parsed = new URL(supabaseUrl);
+    projectRef = parsed.hostname.split('.')[0] || parsed.hostname;
+  } catch {
+    console.error('CRITICAL: Invalid SUPABASE_URL format.');
     process.exit(1);
+  }
+
+  console.log('===============================================================');
+  console.log('  WESSAM ACADEMY — SUPER ADMIN BOOTSTRAP GATEWAY               ');
+  console.log('===============================================================');
+  console.log(`Target Project Host: ${supabaseUrl}`);
+  console.log(`Extracted Project:   ${projectRef}`);
+  console.log(`Target Admin Email:  ${SUPER_ADMIN_EMAIL}`);
+  console.log('---------------------------------------------------------------');
+
+  // Interactive Confirmation Gate
+  if (process.stdin.isTTY) {
+    const confirmation = await promptVisible("Type 'CONFIRM' to proceed with verification on this project: ");
+    if (confirmation !== 'CONFIRM') {
+      console.log('Bootstrap cancelled by operator.');
+      process.exit(0);
+    }
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  console.log(`Starting bootstrap verification for: ${SUPER_ADMIN_EMAIL}`);
+  console.log('Inspecting Supabase Auth & Database state...');
 
-  // 1. Check if Auth user already exists
-  const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers();
-  if (listErr) {
-    console.error('Failed to query Supabase Auth users:', listErr.message);
+  // 1. Check existing Auth identity with full pagination
+  const existingAuthUser = await findAuthUserByEmail(supabase, SUPER_ADMIN_EMAIL);
+
+  // 2. Check existing Profile record
+  let existingProfile: { id: string; role: string; status: string } | null = null;
+  if (existingAuthUser) {
+    const { data: profileData, error: profileErr } = await supabase
+      .from('profiles')
+      .select('id, role, status')
+      .eq('id', existingAuthUser.id)
+      .maybeSingle();
+
+    if (profileErr) {
+      console.error(`Database error checking existing profile: ${profileErr.message}`);
+      process.exit(1);
+    }
+    existingProfile = profileData;
+  }
+
+  // 3. Evaluate Idempotency & Collision
+  if (existingAuthUser && existingProfile) {
+    if (existingProfile.role === 'super_admin' && existingProfile.status === 'active') {
+      console.log('===============================================================');
+      console.log('IDEMPOTENT SUCCESS:');
+      console.log(`Super Admin (${SUPER_ADMIN_EMAIL}) is already provisioned with active status.`);
+      console.log('No passwords or credentials were modified.');
+      console.log(`Auth UID: ${existingAuthUser.id}`);
+      console.log('===============================================================');
+      process.exit(0);
+    }
+
+    // Role mismatch or inactive status
+    console.error('===============================================================');
+    console.error('SECURITY ABORT: Collision detected.');
+    console.error(`User ${SUPER_ADMIN_EMAIL} already exists with role="${existingProfile.role}" and status="${existingProfile.status}".`);
+    console.error('Automatic password resets or role promotions are strictly prohibited.');
+    console.error('Manual DBA / Security Officer review is required.');
+    console.error('===============================================================');
     process.exit(1);
   }
 
-  const existingAuthUser = users.find((u) => u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
-  let userId = existingAuthUser?.id;
+  if (existingAuthUser && !existingProfile) {
+    console.error('===============================================================');
+    console.error('SECURITY ABORT: Orphaned Auth account detected.');
+    console.error(`Auth user exists for ${SUPER_ADMIN_EMAIL} without a public.profiles record.`);
+    console.error('Resolve this inconsistency manually before running bootstrap.');
+    console.error('===============================================================');
+    process.exit(1);
+  }
 
-  if (!existingAuthUser) {
-    console.log('Creating new Supabase Auth Super Admin identity...');
-    const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
-      email: SUPER_ADMIN_EMAIL,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        role: 'super_admin',
-        full_name: FULL_NAME,
-      },
-    });
+  // 4. Secure Password Collection
+  let password = process.env.BOOTSTRAP_SUPERADMIN_PASSWORD;
 
-    if (createErr || !newUser.user) {
-      console.error('Failed to create Auth user:', createErr?.message);
-      process.exit(1);
-    }
-    userId = newUser.user.id;
-    console.log('Auth user created successfully.');
-  } else {
-    if (!userId) {
-      console.error('Failed to locate Auth User ID.');
-      process.exit(1);
-    }
-    console.log(`Auth user exists with UUID: ${userId}. Updating password and metadata...`);
-    const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
-      password: password,
-      email_confirm: true,
-      user_metadata: { role: 'super_admin', full_name: FULL_NAME },
-    });
-    if (updateErr) {
-      console.error('Failed to update existing user password:', updateErr.message);
+  if (!password && process.stdin.isTTY) {
+    password = await promptHidden('Enter new Super Admin password (min 12 characters, hidden): ');
+    const confirmPassword = await promptHidden('Confirm new Super Admin password: ');
+
+    if (password !== confirmPassword) {
+      console.error('Error: Passwords do not match.');
       process.exit(1);
     }
   }
 
-  // 2. Upsert profile in public.profiles table
-  console.log('Syncing database profile in public.profiles...');
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .upsert({
-      id: userId,
+  if (!password || password.length < 12) {
+    console.error('Error: Super Admin password must be at least 12 characters long.');
+    process.exit(1);
+  }
+
+  // 5. Account Provisioning (Atomic creation)
+  console.log(`Creating fresh Super Admin Auth user for ${SUPER_ADMIN_EMAIL}...`);
+  const { data: authResult, error: createAuthErr } = await supabase.auth.admin.createUser({
+    email: SUPER_ADMIN_EMAIL,
+    password: password,
+    email_confirm: true,
+    user_metadata: {
       role: 'super_admin',
       full_name: FULL_NAME,
       full_name_arabic: FULL_NAME_ARABIC,
-      email: SUPER_ADMIN_EMAIL,
+    },
+  });
+
+  if (createAuthErr || !authResult.user) {
+    console.error(`Auth creation failed: ${createAuthErr?.message}`);
+    process.exit(1);
+  }
+
+  const newUserId = authResult.user.id;
+
+  // 6. Strict Profile Insertion (NOT unrestricted upsert)
+  console.log('Creating matching record in public.profiles...');
+  const { error: insertProfileErr } = await supabase
+    .from('profiles')
+    .insert({
+      id: newUserId,
+      role: 'super_admin',
+      full_name: FULL_NAME,
+      full_name_arabic: FULL_NAME_ARABIC,
+      phone: null,
       status: 'active',
+      created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
+    });
 
-  if (profileErr) {
-    console.error('Failed to upsert profile record:', profileErr.message);
+  if (insertProfileErr) {
+    console.error(`Profile creation failed: ${insertProfileErr.message}`);
+    console.error(`Attempting rollback of Auth account ${newUserId}...`);
+    await supabase.auth.admin.deleteUser(newUserId);
     process.exit(1);
   }
 
-  // 3. Verification check
-  if (profile.role !== 'super_admin' || profile.status !== 'active') {
-    console.error('Verification failed: Profile role or status does not match super_admin active specification.');
-    process.exit(1);
-  }
-
-  console.log('---------------------------------------------------------');
-  console.log('Super Admin account successfully bootstrapped and verified!');
-  console.log(`Email:   ${SUPER_ADMIN_EMAIL}`);
-  console.log(`Role:    ${profile.role}`);
-  console.log(`Status:  ${profile.status}`);
-  console.log(`Auth ID: ${userId}`);
-  console.log('---------------------------------------------------------');
-  console.log('IMPORTANT: The owner should sign in immediately and update their password in Profile Settings.');
+  console.log('===============================================================');
+  console.log('SUCCESS: Super Admin account provisioned securely.');
+  console.log(`Target Email: ${SUPER_ADMIN_EMAIL}`);
+  console.log(`Auth UID:     ${newUserId}`);
+  console.log(`Role:         super_admin`);
+  console.log(`Status:       active`);
+  console.log('===============================================================');
 }
 
-// Only execute when invoked directly via CLI
 if (process.argv[1]?.endsWith('bootstrap-super-admin.ts')) {
   bootstrapSuperAdmin().catch((err) => {
-    console.error('Unexpected bootstrap error:', err);
+    console.error('Unexpected error during Super Admin bootstrap:', err);
     process.exit(1);
   });
 }

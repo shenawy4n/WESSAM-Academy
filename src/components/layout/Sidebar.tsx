@@ -79,7 +79,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'profile' as StudentView, label: t.navigation.myProfile, icon: User },
   ];
 
-  const navItems = role === 'student' ? studentNavItems : teacherNavItems;
+  const navItems = (role === 'teacher' || role === 'super_admin')
+    ? teacherNavItems
+    : role === 'student'
+    ? studentNavItems
+    : [];
 
   return (
     <>
