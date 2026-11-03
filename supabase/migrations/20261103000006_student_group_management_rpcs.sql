@@ -51,10 +51,11 @@ BEGIN
         RAISE EXCEPTION 'Student record not found or target user is not a student' USING ERRCODE = 'P0002';
     END IF;
 
-    -- 3. Verify target group exists and is active
+    -- 3. Verify target group exists and is active (Acquire row lock to serialize concurrent capacity checks)
     SELECT name, max_students INTO v_group_name, v_max_students
     FROM public.groups
-    WHERE id = p_group_id AND is_active = true;
+    WHERE id = p_group_id AND is_active = true
+    FOR UPDATE;
 
     IF v_group_name IS NULL THEN
         RAISE EXCEPTION 'Target academic group does not exist or is inactive' USING ERRCODE = 'P0002';
@@ -219,10 +220,11 @@ BEGIN
         RAISE EXCEPTION 'Source and target groups must be different' USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. Verify target group exists and is active
+    -- 2. Verify target group exists and is active (Acquire row lock to serialize concurrent capacity checks)
     SELECT name, max_students INTO v_to_name, v_to_max_students
     FROM public.groups
-    WHERE id = p_to_group_id AND is_active = true;
+    WHERE id = p_to_group_id AND is_active = true
+    FOR UPDATE;
 
     IF v_to_name IS NULL THEN
         RAISE EXCEPTION 'Destination group does not exist or is inactive' USING ERRCODE = 'P0002';
@@ -378,6 +380,10 @@ BEGIN
 
     IF NOT public.is_teacher() THEN
         RAISE EXCEPTION 'Unauthorized: Only teachers and super admins can update student records' USING ERRCODE = '42501';
+    END IF;
+
+    IF p_full_name IS NULL OR pg_catalog.trim(p_full_name) = '' THEN
+        RAISE EXCEPTION 'Student full name is required' USING ERRCODE = '23502';
     END IF;
 
     -- Update profiles (Strictly role = 'student')
