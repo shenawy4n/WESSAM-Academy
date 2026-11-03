@@ -86,16 +86,44 @@ jobs:
           GROUP_MIGRATION="supabase/migrations/20261103000006_student_group_management_rpcs.sql"
 
           if grep -Fq 'wessam-academy-default-salt-fallback' "$LOGIN_FILE"; then
-            echo "::warning::student-login still contains a hardcoded HMAC fallback. Remove it and require RATE_LIMIT_HMAC_SECRET in the Edge Function environment before production."
+            echo "::error::Hardcoded HMAC fallback is forbidden."
+            exit 1
           fi
 
-          if grep -Fq 'pg_catalog.nullif' "$GROUP_MIGRATION"; then
-            echo "::warning::Migration 000006 uses pg_catalog.nullif. NULLIF is SQL special syntax; use NULLIF(...) without schema qualification."
+          grep -Fq 'hmacSha256Hex(data: string, secret: string)' "$LOGIN_FILE" || {
+            echo "::error::HMAC helper must receive the dedicated secret explicitly."
+            exit 1
+          }
+
+          grep -Fq 'RATE_LIMIT_HMAC_SECRET' "$LOGIN_FILE" || {
+            echo "::error::student-login must require RATE_LIMIT_HMAC_SECRET."
+            exit 1
+          }
+
+          grep -Fq 'byteLength < 32' "$LOGIN_FILE" || {
+            echo "::error::RATE_LIMIT_HMAC_SECRET must have at least 32 bytes."
+            exit 1
+          }
+
+          if grep -Fq 'pg_catalog.nullif' "$GROUP_MIGRATION" || grep -Fq 'pg_catalog.trim' "$GROUP_MIGRATION"; then
+            echo "::error::Use NULLIF(...) and pg_catalog.btrim(...) in migration 000006."
+            exit 1
           fi
 
-          if grep -Fq 'pg_catalog.trim' "$GROUP_MIGRATION"; then
-            echo "::warning::Migration 000006 schema-qualifies TRIM. Review and use pg_catalog.btrim(...) where a schema-qualified trim function is needed."
-          fi
+          grep -Fq 'Student is not enrolled in the source group' "$GROUP_MIGRATION" || {
+            echo "::error::Transfer RPC must require source-group membership."
+            exit 1
+          }
+
+          grep -Fq 'Student is not enrolled in the specified group' "$GROUP_MIGRATION" || {
+            echo "::error::Remove RPC must reject missing group membership."
+            exit 1
+          }
+
+          grep -Fq 'target user is not a student' "$GROUP_MIGRATION" || {
+            echo "::error::Group management RPCs must validate the target student role."
+            exit 1
+          }
 
           LOCK_COUNT="$(grep -Eic 'FOR[[:space:]]+UPDATE' "$GROUP_MIGRATION" || true)"
           if [ "$LOCK_COUNT" -lt 2 ]; then
