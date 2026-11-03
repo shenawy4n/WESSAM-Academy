@@ -33,6 +33,11 @@ jobs:
         with:
           version: latest
 
+      # Supabase CLI v3 removed the legacy [inbucket] section. Adapt only
+      # this disposable CI checkout; do not change the project's shared config.
+      - name: Adapt legacy local SMTP config for current CLI
+        run: sed -i 's/^\\[inbucket\\]$/[local_smtp]/' supabase/config.toml
+
       - name: Start disposable local Supabase stack
         run: supabase start
 
