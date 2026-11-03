@@ -35,7 +35,7 @@ DECLARE
     v_student_name TEXT;
     v_has_primary BOOLEAN;
 BEGIN
-    v_actor_id := (pg_catalog.auth.uid());
+    v_actor_id := (auth.uid());
 
     -- 1. Verify caller authorization
     IF NOT public.is_teacher() THEN
@@ -141,7 +141,7 @@ DECLARE
     v_student_name TEXT;
     v_removed_group_id UUID;
 BEGIN
-    v_actor_id := (pg_catalog.auth.uid());
+    v_actor_id := (auth.uid());
 
     -- 1. Authorization check
     IF NOT public.is_teacher() THEN
@@ -233,7 +233,7 @@ DECLARE
     v_to_name TEXT;
     v_student_name TEXT;
 BEGIN
-    v_actor_id := (pg_catalog.auth.uid());
+    v_actor_id := (auth.uid());
 
     -- 1. Authorization
     IF NOT public.is_teacher() THEN
@@ -365,7 +365,7 @@ DECLARE
     v_old_status TEXT;
     v_new_status public.account_status_enum;
 BEGIN
-    v_actor_id := (pg_catalog.auth.uid());
+    v_actor_id := (auth.uid());
 
     -- 1. Authorization
     IF NOT public.is_teacher() THEN
@@ -444,7 +444,7 @@ AS $$
 DECLARE
     v_actor_id UUID;
 BEGIN
-    v_actor_id := (pg_catalog.auth.uid());
+    v_actor_id := (auth.uid());
 
     IF NOT public.is_teacher() THEN
         RAISE EXCEPTION 'Unauthorized: Only teachers and super admins can update student records' USING ERRCODE = '42501';
