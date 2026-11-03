@@ -13,6 +13,8 @@ import { UnauthorizedScreen } from './features/auth/UnauthorizedScreen';
 import { AppLayout } from './components/layout/AppLayout';
 import { TeacherDashboard } from './features/dashboard/TeacherDashboard';
 import { StudentDashboard } from './features/dashboard/StudentDashboard';
+import { StudentManagementView } from './features/students/StudentManagementView';
+import { GroupManagementView } from './features/groups/GroupManagementView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -112,37 +114,10 @@ function AppContent() {
           return <TeacherDashboard onNavigate={(v) => setCurrentTeacherView(v as TeacherView)} />;
 
         case 'students':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.students}
-              subtitle={isRtl ? 'إدارة سجلات الطلاب، الحسابات، وأرقام الهوية الأكاديمية' : 'Student records, accounts, and academic IDs'}
-              targetPhase="Phase 2 — Identity & Student Management"
-              icon={Users}
-              description={isRtl ? 'سيتم إطلاق محرك تسجيل الطلاب وإنشاء هويات تسجيل الدخول الآمنة عبر Edge Function في المرحلة الثانية.' : 'Student provisioning engine and secure Edge Function username-login mapping will be implemented in Phase 2.'}
-              plannedCapabilities={[
-                isRtl ? 'إنشاء حسابات الطلاب باسم المستخدم وكلمة المرور' : 'Username and password student provisioning',
-                isRtl ? 'ربط الطلاب بالمجموعات الدراسية' : 'Group cohort assignment',
-                isRtl ? 'تفعيل وتعطيل الحسابات بضغطة زر' : 'Instant activation and suspension controls',
-                isRtl ? 'استعراض السجل الأكاديمي التفصيلي لكل طالب' : 'Comprehensive academic transcript per student',
-              ]}
-            />
-          );
+          return <StudentManagementView />;
 
         case 'groups':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.groups}
-              subtitle={isRtl ? 'المجموعات الدراسية والفصول الأكاديمية' : 'Academic cohorts and group cohorts'}
-              targetPhase="Phase 2 — Identity & Student Management"
-              icon={FolderGit2}
-              description={isRtl ? 'إدارة المجموعات، توزيع الطلاب، وتعيين المقررات الدراسية الخاصة بكل مجموعة.' : 'Group administration, cohort enrollment, and group-course assignments.'}
-              plannedCapabilities={[
-                isRtl ? 'إنشاء مجموعات دراسية حسب المراحل والمستويات' : 'Create groups categorized by level & academic year',
-                isRtl ? 'ربط المقررات والحصص بالمجموعات' : 'Assign courses and live sessions per group',
-                isRtl ? 'التحكم بالحد الأقصى للطلاب في كل مجموعة' : 'Manage student capacity per cohort',
-              ]}
-            />
-          );
+          return <GroupManagementView />;
 
         case 'courses':
           return (

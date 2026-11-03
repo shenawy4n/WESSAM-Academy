@@ -130,6 +130,104 @@ export interface Translations {
     envVarsNeeded: string;
     retryButton: string;
   };
+  students: {
+    title: string;
+    subtitle: string;
+    registerStudent: string;
+    editStudent: string;
+    studentDetails: string;
+    resetPassword: string;
+    changeStatus: string;
+    searchPlaceholder: string;
+    allStatuses: string;
+    allGroups: string;
+    totalStudents: string;
+    activeStudents: string;
+    inactiveStudents: string;
+    suspendedStudents: string;
+    colStudent: string;
+    colStudentNumber: string;
+    colUsername: string;
+    colGroup: string;
+    colStatus: string;
+    colEnrolledAt: string;
+    colPhone: string;
+    colActions: string;
+    noStudentsFound: string;
+    noStudentsSubtitle: string;
+    tabPersonal: string;
+    tabAcademic: string;
+    tabGroups: string;
+    tabActivity: string;
+    formFullName: string;
+    formFullNameArabic: string;
+    formUsername: string;
+    formPassword: string;
+    formStudentNumber: string;
+    formPhone: string;
+    formPrimaryGroup: string;
+    formNotes: string;
+    formOptional: string;
+    submitting: string;
+    updating: string;
+    statusChangeTitle: string;
+    statusChangeDesc: string;
+    statusChangeReason: string;
+    resetPasswordTitle: string;
+    resetPasswordDesc: string;
+    newPasswordLabel: string;
+    confirmPasswordLabel: string;
+    passwordMismatch: string;
+    passwordSuccess: string;
+    statusSuccess: string;
+    enrollSuccess: string;
+    noGroupsAssigned: string;
+    activityEmptyTitle: string;
+    activityEmptyDesc: string;
+  };
+  groups: {
+    title: string;
+    subtitle: string;
+    createGroup: string;
+    editGroup: string;
+    groupDetails: string;
+    searchPlaceholder: string;
+    allYears: string;
+    allStatuses: string;
+    totalGroups: string;
+    activeGroups: string;
+    totalEnrolled: string;
+    avgCapacity: string;
+    colGroupName: string;
+    colAcademicYear: string;
+    colCapacity: string;
+    colStatus: string;
+    colCreatedAt: string;
+    colActions: string;
+    noGroupsFound: string;
+    noGroupsSubtitle: string;
+    formNameEn: string;
+    formNameAr: string;
+    formYear: string;
+    formMaxCapacity: string;
+    formDescription: string;
+    formIsActive: string;
+    rosterTitle: string;
+    assignedCoursesTitle: string;
+    enrollStudentBtn: string;
+    transferStudentBtn: string;
+    removeFromGroupBtn: string;
+    confirmRemoveTitle: string;
+    confirmRemoveDesc: string;
+    enrollModalTitle: string;
+    selectStudentLabel: string;
+    setAsPrimaryLabel: string;
+    transferModalTitle: string;
+    targetGroupLabel: string;
+    noStudentsInGroup: string;
+    noCoursesAssigned: string;
+    capacityLimitReached: string;
+  };
 }
 
 export const translations: Record<Language, Translations> = {
@@ -257,6 +355,104 @@ export const translations: Record<Language, Translations> = {
       envVarsNeeded: 'المتغيرات البيئية المطلوبة للواجهة الأمامية',
       retryButton: 'إعادة محاولة الاتصال والتحقق',
     },
+    students: {
+      title: 'إدارة شؤون الطلاب',
+      subtitle: 'سجلات الطلاب، بيانات الحسابات، وتوزيع المجموعات الأكاديمية',
+      registerStudent: 'تسجيل طالب جديد',
+      editStudent: 'تعديل بيانات الطالب',
+      studentDetails: 'الملف الأكاديمي للطالب',
+      resetPassword: 'إعادة ضبط كلمة المرور',
+      changeStatus: 'تغيير حالة الحساب',
+      searchPlaceholder: 'البحث بالاسم، اسم المستخدم، أو الرقم الأكاديمي...',
+      allStatuses: 'جميع الحالات',
+      allGroups: 'جميع المجموعات',
+      totalStudents: 'إجمالي الطلاب',
+      activeStudents: 'الطلاب النشطون',
+      inactiveStudents: 'الطلاب غير النشطين',
+      suspendedStudents: 'الطلاب الموقوفون',
+      colStudent: 'اسم الطالب',
+      colStudentNumber: 'الرقم الأكاديمي',
+      colUsername: 'اسم المستخدم',
+      colGroup: 'المجموعة الأساسية',
+      colStatus: 'الحالة',
+      colEnrolledAt: 'تاريخ الالتحاق',
+      colPhone: 'رقم الهاتف',
+      colActions: 'الإجراءات',
+      noStudentsFound: 'لا يوجد طلاب مطابقون لمعايير البحث',
+      noStudentsSubtitle: 'ابدأ بتسجيل طلاب جدد في الأكاديمية لإنشاء سجلاتهم وتوزيعهم على المجموعات.',
+      tabPersonal: 'البيانات الشخصية',
+      tabAcademic: 'البيانات الأكاديمية',
+      tabGroups: 'المجموعات الدراسية',
+      tabActivity: 'النشاط الأكاديمي',
+      formFullName: 'الاسم الكامل (بالإنجليزية)',
+      formFullNameArabic: 'الاسم الكامل (بالعربية)',
+      formUsername: 'اسم المستخدم للولوج',
+      formPassword: 'كلمة المرور الأولية',
+      formStudentNumber: 'الرقم الأكاديمي (اختياري)',
+      formPhone: 'رقم الهاتف / الواتساب (اختياري)',
+      formPrimaryGroup: 'المجموعة الدراسية الأساسية',
+      formNotes: 'ملاحظات إدارية وأكاديمية',
+      formOptional: 'اختياري',
+      submitting: 'جاري إنشاء الحساب الآمن...',
+      updating: 'جاري الحفظ والتحقق...',
+      statusChangeTitle: 'تأكيد تغيير حالة حساب الطالب',
+      statusChangeDesc: 'سيتم تطبيق الحالة فوراً على جلسات الطالب وقواعد بيانات الأكاديمية.',
+      statusChangeReason: 'سبب التغيير (اختياري للتوثيق في سجل العمليات):',
+      resetPasswordTitle: 'إعادة ضبط كلمة مرور الطالب بأمان',
+      resetPasswordDesc: 'يتم تشفير كلمة المرور وتحديثها مباشرة عبر خادم الأكاديمية الآمن.',
+      newPasswordLabel: 'كلمة المرور الجديدة (8 أحرف على الأقل)',
+      confirmPasswordLabel: 'تأكيد كلمة المرور الجديدة',
+      passwordMismatch: 'كلمتا المرور غير متطابقتين',
+      passwordSuccess: 'تم تحديث كلمة مرور الطالب بنجاح',
+      statusSuccess: 'تم تحديث حالة حساب الطالب بنجاح',
+      enrollSuccess: 'تم تسجيل الطالب في المجموعة بنجاح',
+      noGroupsAssigned: 'الطالب غير مسجل في أي مجموعة دراسية حالياً.',
+      activityEmptyTitle: 'السجل الأكاديمي قيد المزامنة',
+      activityEmptyDesc: 'ستظهر هنا الاختبارات المكتملة، التكاليف المصححة، وسجلات الحضور فور بدئها في المراحل القادمة.',
+    },
+    groups: {
+      title: 'إدارة المجموعات الدراسية',
+      subtitle: 'تنظيم الفصول، متابعة الطاقة الاستيعابية، وتوزيع المقررات',
+      createGroup: 'إنشاء مجموعة جديدة',
+      editGroup: 'تعديل بيانات المجموعة',
+      groupDetails: 'تفاصيل المجموعة والطلاب',
+      searchPlaceholder: 'البحث باسم المجموعة أو العام الدراسي...',
+      allYears: 'جميع الأعوام الدراسية',
+      allStatuses: 'جميع الحالات',
+      totalGroups: 'إجمالي المجموعات',
+      activeGroups: 'المجموعات النشطة',
+      totalEnrolled: 'إجمالي المقيدين',
+      avgCapacity: 'متوسط الإشغال',
+      colGroupName: 'اسم المجموعة',
+      colAcademicYear: 'العام الدراسي',
+      colCapacity: 'الإشغال والقدرة',
+      colStatus: 'الحالة',
+      colCreatedAt: 'تاريخ الإنشاء',
+      colActions: 'الإجراءات',
+      noGroupsFound: 'لا توجد مجموعات مطابقة لمعايير البحث',
+      noGroupsSubtitle: 'أنشئ أول مجموعة دراسية للبدء في تنظيم الفصول الدراسية وتسكين الطلاب.',
+      formNameEn: 'اسم المجموعة (بالإنجليزية)',
+      formNameAr: 'اسم المجموعة (بالعربية)',
+      formYear: 'العام الدراسي',
+      formMaxCapacity: 'الحد الأقصى للطلاب',
+      formDescription: 'وصف المجموعة والأهداف',
+      formIsActive: 'المجموعة نشطة وجاهزة للتسكين',
+      rosterTitle: 'قائمة الطلاب المقيدين في المجموعة',
+      assignedCoursesTitle: 'المقررات الدراسية المخصصة للمجموعة',
+      enrollStudentBtn: 'إضافة طالب إلى المجموعة',
+      transferStudentBtn: 'نقل إلى مجموعة أخرى',
+      removeFromGroupBtn: 'إلغاء قيد الطالب من المجموعة',
+      confirmRemoveTitle: 'تأكيد إلغاء القيد من المجموعة',
+      confirmRemoveDesc: 'سيتم إزالة الطالب من هذه المجموعة فقط دون المساس بحسابه أو سجلاته الأكاديمية السابقة.',
+      enrollModalTitle: 'تسكين طالب في هذه المجموعة',
+      selectStudentLabel: 'اختر الطالب للتسكين',
+      setAsPrimaryLabel: 'تعيين هذه المجموعة كمجموعة أساسية للطالب',
+      transferModalTitle: 'نقل الطالب إلى مجموعة أخرى',
+      targetGroupLabel: 'المجموعة الدراسية الوجهة',
+      noStudentsInGroup: 'لا يوجد طلاب مسجلون في هذه المجموعة حالياً.',
+      noCoursesAssigned: 'لم يتم ربط مقررات دراسية بهذه المجموعة بعد.',
+      capacityLimitReached: 'تم بلوغ الحد الأقصى للطاقة الاستيعابية لهذه المجموعة.',
+    },
   },
   en: {
     common: {
@@ -381,6 +577,104 @@ export const translations: Record<Language, Translations> = {
       step3Desc: 'After configuring the two client variables in your .env file or deployment settings, click Verify Connection.',
       envVarsNeeded: 'Required Frontend Environment Variables',
       retryButton: 'Verify Connection & Reload',
+    },
+    students: {
+      title: 'Student Directory & Management',
+      subtitle: 'Student records, secure account credentials, and academic group cohorts',
+      registerStudent: 'Register New Student',
+      editStudent: 'Edit Student Details',
+      studentDetails: 'Student Academic Profile',
+      resetPassword: 'Reset Password',
+      changeStatus: 'Change Account Status',
+      searchPlaceholder: 'Search by student name, username, or student number...',
+      allStatuses: 'All Statuses',
+      allGroups: 'All Groups',
+      totalStudents: 'Total Students',
+      activeStudents: 'Active Students',
+      inactiveStudents: 'Inactive Students',
+      suspendedStudents: 'Suspended Students',
+      colStudent: 'Student Name',
+      colStudentNumber: 'Student ID',
+      colUsername: 'Username',
+      colGroup: 'Primary Group',
+      colStatus: 'Status',
+      colEnrolledAt: 'Enrolled Date',
+      colPhone: 'Phone',
+      colActions: 'Actions',
+      noStudentsFound: 'No students matching the criteria found',
+      noStudentsSubtitle: 'Begin by registering new academy students to populate cohorts and transcripts.',
+      tabPersonal: 'Personal Info',
+      tabAcademic: 'Academic Info',
+      tabGroups: 'Group Memberships',
+      tabActivity: 'Academic Activity',
+      formFullName: 'Full Name (English)',
+      formFullNameArabic: 'Full Name (Arabic)',
+      formUsername: 'Login Username',
+      formPassword: 'Initial Password',
+      formStudentNumber: 'Student Number (Optional)',
+      formPhone: 'Phone / WhatsApp (Optional)',
+      formPrimaryGroup: 'Primary Academic Group',
+      formNotes: 'Administrative & Academic Notes',
+      formOptional: 'Optional',
+      submitting: 'Provisioning secure identity...',
+      updating: 'Saving and validating...',
+      statusChangeTitle: 'Confirm Account Status Change',
+      statusChangeDesc: 'Status modifications are applied immediately to student sessions and database access.',
+      statusChangeReason: 'Reason for status update (logged in audit trail):',
+      resetPasswordTitle: 'Secure Student Password Reset',
+      resetPasswordDesc: 'Passwords are encrypted and updated directly through the academy server engine.',
+      newPasswordLabel: 'New Password (Min 8 characters)',
+      confirmPasswordLabel: 'Confirm New Password',
+      passwordMismatch: 'Passwords do not match',
+      passwordSuccess: 'Student password successfully updated',
+      statusSuccess: 'Student account status successfully updated',
+      enrollSuccess: 'Student successfully enrolled into group',
+      noGroupsAssigned: 'Student is not currently enrolled in any academic groups.',
+      activityEmptyTitle: 'Academic Transcript Syncing',
+      activityEmptyDesc: 'Completed quizzes, evaluated submissions, and live attendance records will appear here as coursework begins.',
+    },
+    groups: {
+      title: 'Academic Group Management',
+      subtitle: 'Cohort management, capacity monitoring, and course assignments',
+      createGroup: 'Create New Group',
+      editGroup: 'Edit Group Information',
+      groupDetails: 'Group Details & Roster',
+      searchPlaceholder: 'Search by group name or academic year...',
+      allYears: 'All Academic Years',
+      allStatuses: 'All Statuses',
+      totalGroups: 'Total Groups',
+      activeGroups: 'Active Groups',
+      totalEnrolled: 'Total Enrolled',
+      avgCapacity: 'Average Utilization',
+      colGroupName: 'Group Name',
+      colAcademicYear: 'Academic Year',
+      colCapacity: 'Capacity & Enrollment',
+      colStatus: 'Status',
+      colCreatedAt: 'Created At',
+      colActions: 'Actions',
+      noGroupsFound: 'No academic groups found matching query',
+      noGroupsSubtitle: 'Create your first academic group to begin cohort organization and student enrollment.',
+      formNameEn: 'Group Name (English)',
+      formNameAr: 'Group Name (Arabic)',
+      formYear: 'Academic Year',
+      formMaxCapacity: 'Maximum Student Capacity',
+      formDescription: 'Description & Learning Objectives',
+      formIsActive: 'Group is active and open for enrollment',
+      rosterTitle: 'Enrolled Student Roster',
+      assignedCoursesTitle: 'Assigned Curriculum & Courses',
+      enrollStudentBtn: 'Enroll Student into Group',
+      transferStudentBtn: 'Transfer Student to Another Group',
+      removeFromGroupBtn: 'Remove Student from Group',
+      confirmRemoveTitle: 'Confirm Removal from Group',
+      confirmRemoveDesc: 'The student will only be removed from this specific group. Their academy account and historical records are preserved.',
+      enrollModalTitle: 'Enroll Student in this Group',
+      selectStudentLabel: 'Select Student to Enroll',
+      setAsPrimaryLabel: 'Set this group as the student primary group',
+      transferModalTitle: 'Transfer Student between Groups',
+      targetGroupLabel: 'Destination Academic Group',
+      noStudentsInGroup: 'No students are currently enrolled in this group.',
+      noCoursesAssigned: 'No courses have been linked to this group yet.',
+      capacityLimitReached: 'This group has reached its maximum student capacity.',
     },
   },
 };
