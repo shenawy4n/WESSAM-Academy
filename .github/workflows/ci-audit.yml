@@ -110,6 +110,16 @@ jobs:
             exit 1
           fi
 
+          if grep -Fq 'pg_catalog.auth.uid()' "$GROUP_MIGRATION"; then
+            echo "::error::Supabase auth.uid() belongs to the auth schema, not pg_catalog."
+            exit 1
+          fi
+
+          grep -Fq 'auth.uid()' "$GROUP_MIGRATION" || {
+            echo "::error::Group RPCs must resolve the authenticated caller with auth.uid()."
+            exit 1
+          }
+
           grep -Fq 'Student is not enrolled in the source group' "$GROUP_MIGRATION" || {
             echo "::error::Transfer RPC must require source-group membership."
             exit 1
