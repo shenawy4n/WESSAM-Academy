@@ -7,14 +7,16 @@
  * Never hardcodes passwords or commits secrets.
  * 
  * Security Guardrails:
- * 1. Project-ref verification and explicit interactive confirmation before any mutation.
- * 2. Hidden terminal prompt for password input (no echo, avoids shell history pollution).
- * 3. Paginated lookup in Supabase Auth to prevent false-negative user omission.
- * 4. Idempotent & Fail-Safe:
+ * 1. Explicit EXPECTED_PROJECT_REF validation against SUPABASE_URL hostname.
+ * 2. Interactive confirmation gate (TTY) or explicit BOOTSTRAP_CONFIRM_PROJECT variable (non-TTY).
+ * 3. Hidden terminal prompt for password input (no echo, avoids shell history pollution).
+ * 4. Paginated lookup in Supabase Auth to prevent false-negative user omission.
+ * 5. Idempotent & Fail-Safe:
  *    - If already super_admin + active: Exits cleanly without modifying credentials or data.
  *    - If exists with another role or invalid state: Aborts immediately to prevent takeover.
- * 5. Uses strict .insert() rather than unrestricted .upsert() on public.profiles.
- * 6. Never logs passwords, API keys, or JWT tokens.
+ * 6. Uses strict .insert() rather than unrestricted .upsert() on public.profiles.
+ * 7. Verified compensation rollback on failure with manual recovery telemetry if deletion fails.
+ * 8. Never logs passwords, API keys, or JWT tokens.
  */
 
 import * as readline from 'node:readline';
@@ -103,19 +105,36 @@ async function findAuthUserByEmail(supabase: any, email: string): Promise<User |
 async function bootstrapSuperAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+  const expectedProjectRef = process.env.EXPECTED_PROJECT_REF?.trim();
 
   if (!supabaseUrl || !serviceRoleKey) {
     console.error('CRITICAL: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required.');
     process.exit(1);
   }
 
-  // Parse project ref for verification
-  let projectRef = 'unknown';
+  if (!expectedProjectRef) {
+    console.error('CRITICAL: EXPECTED_PROJECT_REF environment variable is required to prevent accidental execution against an arbitrary Supabase project.');
+    console.error('Example: EXPECTED_PROJECT_REF="abcdefghijklmnop"');
+    process.exit(1);
+  }
+
+  // Parse and verify project reference from SUPABASE_URL
+  let actualProjectRef = 'unknown';
   try {
     const parsed = new URL(supabaseUrl);
-    projectRef = parsed.hostname.split('.')[0] || parsed.hostname;
+    actualProjectRef = parsed.hostname.split('.')[0] || parsed.hostname;
   } catch {
     console.error('CRITICAL: Invalid SUPABASE_URL format.');
+    process.exit(1);
+  }
+
+  if (actualProjectRef !== expectedProjectRef) {
+    console.error('===============================================================');
+    console.error('CRITICAL SECURITY ABORT: Project reference mismatch!');
+    console.error(`Configured EXPECTED_PROJECT_REF: "${expectedProjectRef}"`);
+    console.error(`Actual SUPABASE_URL project ref: "${actualProjectRef}"`);
+    console.error('Execution halted to protect against accidental modification of the wrong environment.');
+    console.error('===============================================================');
     process.exit(1);
   }
 
@@ -123,16 +142,22 @@ async function bootstrapSuperAdmin() {
   console.log('  WESSAM ACADEMY — SUPER ADMIN BOOTSTRAP GATEWAY               ');
   console.log('===============================================================');
   console.log(`Target Project Host: ${supabaseUrl}`);
-  console.log(`Extracted Project:   ${projectRef}`);
+  console.log(`Verified Project:    ${actualProjectRef}`);
   console.log(`Target Admin Email:  ${SUPER_ADMIN_EMAIL}`);
   console.log('---------------------------------------------------------------');
 
-  // Interactive Confirmation Gate
+  // Confirmation Gate
   if (process.stdin.isTTY) {
-    const confirmation = await promptVisible("Type 'CONFIRM' to proceed with verification on this project: ");
-    if (confirmation !== 'CONFIRM') {
-      console.log('Bootstrap cancelled by operator.');
+    const confirmation = await promptVisible(`Type '${actualProjectRef}' to confirm execution on this project: `);
+    if (confirmation !== actualProjectRef) {
+      console.log('Bootstrap cancelled: Project confirmation did not match.');
       process.exit(0);
+    }
+  } else {
+    const nonTtyConfirm = process.env.BOOTSTRAP_CONFIRM_PROJECT?.trim();
+    if (nonTtyConfirm !== actualProjectRef) {
+      console.error('CRITICAL: In non-interactive mode, BOOTSTRAP_CONFIRM_PROJECT matching the project ref is required for safety.');
+      process.exit(1);
     }
   }
 
@@ -247,8 +272,19 @@ async function bootstrapSuperAdmin() {
 
   if (insertProfileErr) {
     console.error(`Profile creation failed: ${insertProfileErr.message}`);
-    console.error(`Attempting rollback of Auth account ${newUserId}...`);
-    await supabase.auth.admin.deleteUser(newUserId);
+    console.error(`Initiating compensation rollback for Auth account ${newUserId}...`);
+    
+    const { error: rollbackErr } = await supabase.auth.admin.deleteUser(newUserId);
+    if (rollbackErr) {
+      console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+      console.error('CRITICAL ROLLBACK FAILURE: Auth identity could not be deleted!');
+      console.error(`Orphaned Auth UID: ${newUserId}`);
+      console.error(`Error message:     ${rollbackErr.message}`);
+      console.error('MANUAL ACTION REQUIRED: Log in to Supabase Console > Authentication and delete this account manually.');
+      console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    } else {
+      console.log(`Compensation rollback confirmed: Auth identity ${newUserId} successfully purged.`);
+    }
     process.exit(1);
   }
 

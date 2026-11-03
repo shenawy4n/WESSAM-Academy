@@ -4,12 +4,14 @@
  * 
  * WESSAM Academy — Edge Function: student-login
  * Secure username-based authentication resolving username -> internal Auth identity.
- * Features:
- * - True Redis sliding-window log via Upstash REST pipeline (ZREMRANGEBYSCORE + ZADD + ZCARD + EXPIRE)
- * - SHA-256 hashed keys for IP and username to protect PII in cache
- * - In-memory sliding-window defense-in-depth fallback
- * - Spoof-resistant IP extraction
- * - Timing protection and uniform 401 generic failure responses
+ * 
+ * Distributed Rate-Limiting Architecture:
+ * - Single atomic Redis Lua script executed via Upstash EVAL (zero interleave/race condition).
+ * - HMAC-SHA-256 keyed hashing for IP and username cache keys to prevent PII leakage.
+ * - Spoof-resistant IP extraction: cf-connecting-ip trusted ONLY when validated with cf-ray header.
+ * - Bounded in-memory local fallback with LRU-style eviction to prevent container memory growth.
+ * - Strict fail-closed / 503 behavior when production Redis is configured but unreachable.
+ * - Explicit local-only warning logged when Redis is absent (e.g. dev environments).
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -28,105 +30,223 @@ const genericAuthFailure = () =>
     { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 
-// Local in-memory sliding-window log for defense-in-depth and local dev
-const localSlidingWindows = new Map<string, number[]>();
+// ------------------------------------------------------------------------------
+// ATOMIC REDIS LUA SLIDING-WINDOW SCRIPT
+// ------------------------------------------------------------------------------
+const LUA_SLIDING_WINDOW_SCRIPT = `
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local member = ARGV[4]
+local expire_sec = tonumber(ARGV[5])
 
-function checkLocalSlidingLimit(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const threshold = now - windowMs;
-  const existing = localSlidingWindows.get(key) || [];
-  
-  // Prune timestamps outside current sliding window
-  const active = existing.filter((ts) => ts > threshold);
-  
-  if (active.length >= limit) {
-    localSlidingWindows.set(key, active);
-    return false;
-  }
-  
-  active.push(now);
-  localSlidingWindows.set(key, active);
-  return true;
+local threshold = now - window_ms
+
+-- 1. Purge entries outside sliding window
+redis.call('ZREMRANGEBYSCORE', key, '-inf', threshold)
+
+-- 2. Count active attempts
+local current_count = redis.call('ZCARD', key)
+
+if current_count < limit then
+  -- Allowed: register current attempt and refresh TTL
+  redis.call('ZADD', key, now, member)
+  redis.call('EXPIRE', key, expire_sec)
+  local remaining = limit - current_count - 1
+  return { 1, remaining, 0 }
+else
+  -- Blocked: calculate retry-after seconds from oldest member in window
+  local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+  local retry_after = expire_sec
+  if oldest and #oldest >= 2 then
+    local oldest_ts = tonumber(oldest[2])
+    if oldest_ts then
+      retry_after = math.ceil((oldest_ts + window_ms - now) / 1000)
+      if retry_after < 1 then retry_after = 1 end
+    end
+  end
+  redis.call('EXPIRE', key, expire_sec)
+  return { 0, 0, retry_after }
+end
+`;
+
+// ------------------------------------------------------------------------------
+// BOUNDED LOCAL IN-MEMORY TRACKING
+// ------------------------------------------------------------------------------
+interface LocalRateEntry {
+  timestamps: number[];
+  lastSeen: number;
 }
 
-// Compute truncated SHA-256 hex string to protect PII in rate-limit keys
-async function sha256Hex(input: string): Promise<string> {
+const localSlidingWindows = new Map<string, LocalRateEntry>();
+const MAX_LOCAL_ENTRIES = 2000;
+
+function checkLocalSlidingLimit(
+  key: string,
+  limit: number,
+  windowMs: number
+): { allowed: boolean; retryAfter: number } {
+  const now = Date.now();
+  const threshold = now - windowMs;
+
+  // Cleanup expired entries periodically to prevent unbounded memory growth
+  if (localSlidingWindows.size > MAX_LOCAL_ENTRIES) {
+    for (const [k, v] of localSlidingWindows.entries()) {
+      if (v.lastSeen < threshold) {
+        localSlidingWindows.delete(k);
+      }
+    }
+    // Hard cap eviction if still above threshold
+    if (localSlidingWindows.size > MAX_LOCAL_ENTRIES) {
+      const keysToDrop = Array.from(localSlidingWindows.keys()).slice(0, 500);
+      for (const k of keysToDrop) localSlidingWindows.delete(k);
+    }
+  }
+
+  const entry = localSlidingWindows.get(key) || { timestamps: [], lastSeen: now };
+  const active = entry.timestamps.filter((ts) => ts > threshold);
+
+  if (active.length >= limit) {
+    const oldest = active[0] || threshold;
+    const retryAfter = Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
+    localSlidingWindows.set(key, { timestamps: active, lastSeen: now });
+    return { allowed: false, retryAfter };
+  }
+
+  active.push(now);
+  localSlidingWindows.set(key, { timestamps: active, lastSeen: now });
+  return { allowed: true, retryAfter: 0 };
+}
+
+// ------------------------------------------------------------------------------
+// HMAC-SHA-256 KEY HASHING
+// ------------------------------------------------------------------------------
+async function hmacSha256Hex(data: string): Promise<string> {
+  const secret =
+    Deno.env.get('RATE_LIMIT_HMAC_SECRET') ||
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+    'wessam-academy-default-salt-fallback';
+
   const encoder = new TextEncoder();
-  const data = encoder.encode(input);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+  const hashArray = Array.from(new Uint8Array(signature));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Extract client IP safely from edge headers
+// ------------------------------------------------------------------------------
+// SPOOF-RESISTANT CLIENT IP EXTRACTION
+// ------------------------------------------------------------------------------
 function extractClientIp(req: Request): string {
+  // Trust cf-connecting-ip ONLY when verified by Cloudflare cf-ray edge header
+  const hasCfRay = req.headers.has('cf-ray');
   const cfIp = req.headers.get('cf-connecting-ip');
-  if (cfIp) return cfIp.trim();
-  
-  const realIp = req.headers.get('x-real-ip');
-  if (realIp) return realIp.trim();
-  
-  const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
+  if (hasCfRay && cfIp && cfIp.trim().length > 0) {
+    return cfIp.trim();
   }
-  
-  return 'unknown-ip';
+
+  // When not traversing validated Cloudflare edge, sanitize and flag unverified headers
+  const xRealIp = req.headers.get('x-real-ip');
+  if (xRealIp && /^[\d.:a-fA-F]+$/.test(xRealIp.trim())) {
+    return `unverified:${xRealIp.trim()}`;
+  }
+
+  const xForwarded = req.headers.get('x-forwarded-for');
+  if (xForwarded) {
+    const first = xForwarded.split(',')[0]?.trim();
+    if (first && /^[\d.:a-fA-F]+$/.test(first)) {
+      return `unverified:${first}`;
+    }
+  }
+
+  return 'peer:untrusted';
 }
 
-// True Distributed Sliding-Window Log Rate Limiter
-async function checkDistributedSlidingLimit(
+// ------------------------------------------------------------------------------
+// ATOMIC SLIDING-WINDOW EVALUATOR
+// ------------------------------------------------------------------------------
+interface RateLimitResult {
+  allowed: boolean;
+  retryAfter: number;
+  serviceError?: boolean;
+}
+
+async function evaluateAtomicRateLimit(
   key: string,
   limit: number,
   windowSeconds: number
-): Promise<boolean> {
+): Promise<RateLimitResult> {
   const windowMs = windowSeconds * 1000;
   const now = Date.now();
-  const threshold = now - windowMs;
-
-  // 1. Evaluate local sliding window first (defense-in-depth)
-  const localAllowed = checkLocalSlidingLimit(key, limit, windowMs);
-  if (!localAllowed) {
-    return false;
-  }
-
   const upstashUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
   const upstashToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 
-  if (!upstashUrl || !upstashToken) {
-    return localAllowed;
+  // Check bounded local sliding window first as an immediate defense-in-depth shield
+  const localCheck = checkLocalSlidingLimit(key, limit, windowMs);
+  if (!localCheck.allowed) {
+    return { allowed: false, retryAfter: localCheck.retryAfter };
   }
 
+  // If Upstash Redis is not configured (e.g. local dev), log clear warning and rely on local tracking
+  if (!upstashUrl || !upstashToken) {
+    console.warn('[SECURITY NOTICE] UPSTASH_REDIS_REST_URL not configured. Operating in local container fallback mode. Distributed multi-instance protection is NOT active.');
+    return { allowed: true, retryAfter: 0 };
+  }
+
+  // Execute atomic Lua script via Upstash REST API command endpoint
   try {
     const memberId = `${now}-${crypto.randomUUID()}`;
-    const pipelineUrl = `${upstashUrl.replace(/\/$/, '')}/pipeline`;
-    const response = await fetch(pipelineUrl, {
+    const endpoint = `${upstashUrl.replace(/\/$/, '')}`;
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${upstashToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify([
-        ['ZREMRANGEBYSCORE', key, 0, threshold],
-        ['ZADD', key, now, memberId],
-        ['ZCARD', key],
-        ['EXPIRE', key, windowSeconds],
+        'EVAL',
+        LUA_SLIDING_WINDOW_SCRIPT,
+        '1',
+        key,
+        String(now),
+        String(windowMs),
+        String(limit),
+        memberId,
+        String(windowSeconds),
       ]),
     });
 
     if (!response.ok) {
-      console.warn(`Upstash rate-limit pipeline error: HTTP ${response.status}`);
-      return localAllowed;
+      console.error(`[SECURITY ALERT] Upstash Redis EVAL returned HTTP ${response.status}`);
+      // Fail closed: Never treat a failed Redis request as an allowed check
+      return { allowed: false, retryAfter: 60, serviceError: true };
     }
 
-    const results = await response.json();
-    // Pipeline index 2 corresponds to ZCARD
-    const currentCount = results[2]?.result ?? 1;
-    return typeof currentCount === 'number' && currentCount <= limit;
+    const data = await response.json().catch(() => null);
+    if (!data || data.error || !Array.isArray(data.result) || data.result.length < 3) {
+      console.error('[SECURITY ALERT] Malformed Upstash Redis Lua response:', data?.error || data);
+      return { allowed: false, retryAfter: 60, serviceError: true };
+    }
+
+    const [allowedCode, , retryAfter] = data.result;
+    if (allowedCode === 1) {
+      return { allowed: true, retryAfter: 0 };
+    }
+
+    return { allowed: false, retryAfter: Number(retryAfter) || windowSeconds };
   } catch (err) {
-    console.warn('Upstash rate-limit check failed, falling back safely to local tracker:', err);
-    return localAllowed;
+    console.error('[SECURITY ALERT] Failed to communicate with Upstash Redis cluster:', err);
+    // Fail closed: Never treat connection failures as authorization to proceed
+    return { allowed: false, retryAfter: 60, serviceError: true };
   }
 }
 
@@ -144,14 +264,29 @@ serve(async (req: Request) => {
 
   try {
     const clientIp = extractClientIp(req);
-    const hashedIp = (await sha256Hex(clientIp)).slice(0, 16);
+    const hashedIp = (await hmacSha256Hex(clientIp)).slice(0, 20);
 
-    // 1. IP-level Rate Limiting: max 20 attempts per 10 minutes per IP
-    const ipAllowed = await checkDistributedSlidingLimit(`rl:ip:${hashedIp}`, 20, 600);
-    if (!ipAllowed) {
+    // 1. IP-level Atomic Rate Limiting: max 20 attempts per 10 minutes per IP
+    const ipCheck = await evaluateAtomicRateLimit(`rl:ip:${hashedIp}`, 20, 600);
+    if (!ipCheck.allowed) {
+      if (ipCheck.serviceError) {
+        return new Response(
+          JSON.stringify({ error: 'Authentication service temporarily unavailable. Please retry in a moment.' }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } }
+        );
+      }
       return new Response(
-        JSON.stringify({ error: 'Too many login attempts. Please wait 10 minutes before retrying.' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: `Too many login attempts from this network. Please wait ${ipCheck.retryAfter} seconds before retrying.`,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'Retry-After': String(ipCheck.retryAfter),
+          },
+        }
       );
     }
 
@@ -181,13 +316,28 @@ serve(async (req: Request) => {
       return genericAuthFailure();
     }
 
-    // 2. Account-level Rate Limiting: max 5 attempts per 10 minutes per username
-    const hashedUser = (await sha256Hex(trimmedUsername)).slice(0, 16);
-    const userAllowed = await checkDistributedSlidingLimit(`rl:u:${hashedUser}`, 5, 600);
-    if (!userAllowed) {
+    // 2. Account-level Atomic Rate Limiting: max 5 attempts per 10 minutes per username
+    const hashedUser = (await hmacSha256Hex(trimmedUsername)).slice(0, 20);
+    const userCheck = await evaluateAtomicRateLimit(`rl:u:${hashedUser}`, 5, 600);
+    if (!userCheck.allowed) {
+      if (userCheck.serviceError) {
+        return new Response(
+          JSON.stringify({ error: 'Authentication service temporarily unavailable. Please retry in a moment.' }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } }
+        );
+      }
       return new Response(
-        JSON.stringify({ error: 'Too many failed login attempts for this account. Please wait 10 minutes.' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: `Too many failed login attempts for this account. Please wait ${userCheck.retryAfter} seconds.`,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'Retry-After': String(userCheck.retryAfter),
+          },
+        }
       );
     }
 
