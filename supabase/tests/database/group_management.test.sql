@@ -39,7 +39,7 @@ INSERT INTO public.student_credentials (profile_id, username, internal_auth_emai
 VALUES
   ('22222222-2222-4222-8222-222222222222', 'student_one_test', 'student_one_test@internal.invalid', true),
   ('33333333-3333-4333-8333-333333333333', 'student_two_test', 'student_two_test@internal.invalid', true)
-ON CONFLICT (profile_id) DO NOTHING;
+ON CONFLICT (username) DO NOTHING;
 
 -- Exercise the RPCs as an authenticated teacher, not as the database owner.
 SET LOCAL ROLE authenticated;
