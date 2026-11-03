@@ -122,12 +122,7 @@ function checkLocalSlidingLimit(
 // ------------------------------------------------------------------------------
 // HMAC-SHA-256 KEY HASHING
 // ------------------------------------------------------------------------------
-async function hmacSha256Hex(data: string): Promise<string> {
-  const secret =
-    Deno.env.get('RATE_LIMIT_HMAC_SECRET') ||
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-    'wessam-academy-default-salt-fallback';
-
+async function hmacSha256Hex(data: string, secret: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
@@ -263,8 +258,19 @@ serve(async (req: Request) => {
   }
 
   try {
+    // A dedicated high-entropy secret is mandatory. Never fall back to a public
+    // constant or the Supabase service-role key for rate-limit pseudonymization.
+    const rateLimitHmacSecret = Deno.env.get('RATE_LIMIT_HMAC_SECRET');
+    if (!rateLimitHmacSecret || new TextEncoder().encode(rateLimitHmacSecret).byteLength < 32) {
+      console.error('[SECURITY CONFIG] RATE_LIMIT_HMAC_SECRET is missing or shorter than 32 bytes.');
+      return new Response(
+        JSON.stringify({ error: 'Authentication service configuration error.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const clientIp = extractClientIp(req);
-    const hashedIp = (await hmacSha256Hex(clientIp)).slice(0, 20);
+    const hashedIp = (await hmacSha256Hex(clientIp, rateLimitHmacSecret)).slice(0, 20);
 
     // 1. IP-level Atomic Rate Limiting: max 20 attempts per 10 minutes per IP
     const ipCheck = await evaluateAtomicRateLimit(`rl:ip:${hashedIp}`, 20, 600);
@@ -317,7 +323,7 @@ serve(async (req: Request) => {
     }
 
     // 2. Account-level Atomic Rate Limiting: max 5 attempts per 10 minutes per username
-    const hashedUser = (await hmacSha256Hex(trimmedUsername)).slice(0, 20);
+    const hashedUser = (await hmacSha256Hex(trimmedUsername, rateLimitHmacSecret)).slice(0, 20);
     const userCheck = await evaluateAtomicRateLimit(`rl:u:${hashedUser}`, 5, 600);
     if (!userCheck.allowed) {
       if (userCheck.serviceError) {
