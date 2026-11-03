@@ -3,7 +3,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(21);
+SELECT extensions.plan(22);
 
 -- Deterministic, isolated identities for the test transaction.
 INSERT INTO auth.users (
