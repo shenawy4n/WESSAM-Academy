@@ -374,7 +374,14 @@ export async function archiveGroup(params: {
   groupId: string;
   reason: string;
 }): Promise<void> {
-  if (!supabase) return;
+  if (!supabase) {
+    const demo = PREVIEW_DEMO_GROUPS.find((g) => g.id === params.groupId);
+    if (demo) {
+      demo.archivedAt = new Date().toISOString();
+      demo.archiveReason = params.reason.trim();
+    }
+    return;
+  }
 
   const { error } = await supabase.rpc('archive_group', {
     p_group_id: params.groupId,
@@ -389,7 +396,16 @@ export async function archiveGroup(params: {
 export async function restoreGroup(params: {
   groupId: string;
 }): Promise<void> {
-  if (!supabase) return;
+  if (!supabase) {
+    const demo = PREVIEW_DEMO_GROUPS.find((g) => g.id === params.groupId);
+    if (demo) {
+      demo.archivedAt = null;
+      demo.archivedBy = null;
+      demo.archiveReason = null;
+      demo.isActive = true;
+    }
+    return;
+  }
 
   const { error } = await supabase.rpc('restore_group', {
     p_group_id: params.groupId,

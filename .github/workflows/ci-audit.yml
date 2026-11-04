@@ -6,6 +6,7 @@ on:
       - main
   push:
     branches:
+      - main
       - setup/github-actions-ci
   workflow_dispatch:
 
@@ -59,7 +60,8 @@ jobs:
             20261103000004_harden_student_isolation_and_functions.sql \
             20261103000005_complete_rls_active_student_hardening.sql \
             20261103000006_student_group_management_rpcs.sql \
-            20261104000001_soft_archive_groups.sql
+            20261104000001_soft_archive_groups.sql \
+            20261104000002_harden_group_archive_authorization.sql
           do
             test -f "supabase/migrations/$migration" || {
               echo "::error::Missing migration: $migration"

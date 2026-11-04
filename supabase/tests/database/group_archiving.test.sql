@@ -1,11 +1,12 @@
 -- ==============================================================================
--- Integration tests for migration 20261104000001 (Group Soft Archiving)
+-- Integration tests for Group Soft Archiving & Authorization Hardening
+-- Migrations: 20261104000001 & 20261104000002
 -- Executed against disposable Supabase database in CI / local test harness.
 -- ==============================================================================
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(25);
+SELECT extensions.plan(40);
 
 -- ------------------------------------------------------------------------------
 -- 1. SETUP DETERMINISTIC IDENTITIES
@@ -81,7 +82,7 @@ SET LOCAL ROLE anon;
 SELECT extensions.throws_ok(
   $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Anon attempt')$$,
   '42501',
-  'Unauthorized: Only super admins can archive groups',
+  'Unauthorized: Not authenticated',
   'Anon caller is rejected'
 );
 RESET ROLE;
@@ -282,6 +283,206 @@ SELECT extensions.lives_ok(
     false
   )$$,
   'Restored group can accept new student enrollments'
+);
+RESET ROLE;
+
+-- ------------------------------------------------------------------------------
+-- 3. FIX A & B: DIRECT ARCHIVE METADATA PROTECTION & RESTORE LIFECYCLE TESTS
+-- ------------------------------------------------------------------------------
+
+-- Test 26: Teacher cannot set archived_at directly via UPDATE
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_at = now() WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Teacher cannot directly update archived_at'
+);
+
+-- Test 27: Teacher cannot set archived_by directly via UPDATE
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_by = '11111111-1111-4111-8111-111111111111'::uuid WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Teacher cannot directly update archived_by'
+);
+
+-- Test 28: Teacher cannot modify archive_reason directly via UPDATE
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archive_reason = 'Unauthorized reason tampering' WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Teacher cannot directly update archive_reason'
+);
+
+-- Test 29: Teacher cannot clear archive metadata directly via UPDATE on archived group
+-- First archive Group B via super admin
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT public.archive_group('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'Valid super admin archive');
+
+-- Now teacher tries to clear archived_at directly via UPDATE
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_at = NULL, archive_reason = NULL WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Teacher cannot directly clear archive metadata'
+);
+
+-- Test 30: Student cannot modify archive metadata directly
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_at = NULL WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Student cannot directly update archive metadata'
+);
+
+-- Test 31: Super admin cannot modify archive metadata directly via UPDATE (must use RPC)
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archive_reason = 'Tampered without RPC' WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Super Admin cannot directly update archive metadata outside RPC'
+);
+
+-- Test 32: Normal authorized group updates by Teacher (updating name, description, max_students) succeed
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.lives_ok(
+  $$UPDATE public.groups SET name = 'Cohort Alpha Updated', description = 'Updated by teacher' WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'$$,
+  'Teacher can still update non-archive group fields'
+);
+RESET ROLE;
+
+-- Test 33: Verify normal group update was persisted
+SELECT extensions.is(
+  (SELECT name FROM public.groups WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  'Cohort Alpha Updated',
+  'Ordinary group fields update successfully persists'
+);
+
+-- Test 34: Super Admin restoring a non-archived group throws controlled error 22023
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.restore_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1')$$,
+  '22023',
+  'Cannot restore group: Group is not currently archived',
+  'Restoring non-archived group throws controlled error'
+);
+
+-- Restore Group B properly via restore_group
+SELECT extensions.lives_ok(
+  $$SELECT public.restore_group('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2')$$,
+  'Restore group B succeeds via RPC'
+);
+RESET ROLE;
+
+-- Test 35: Restored group explicitly has is_active = TRUE
+SELECT extensions.is(
+  (SELECT is_active FROM public.groups WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'),
+  true,
+  'Restored group has is_active = TRUE'
+);
+
+-- ------------------------------------------------------------------------------
+-- 4. FIX C: HARDENED provision_student_tx TESTS
+-- ------------------------------------------------------------------------------
+
+-- Archive Group A again to test provision_student_tx rejection on archived group
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Re-archive for provisioning test');
+RESET ROLE;
+
+-- Test 36: provision_student_tx rejects target group that is archived
+SET LOCAL ROLE service_role;
+SELECT extensions.throws_ok(
+  $$SELECT public.provision_student_tx(
+    '44444444-4444-4444-8444-444444444444'::uuid,
+    'Archived Student Test',
+    'طالب اختبار أرشفة',
+    '0500000001',
+    'archived_student_test',
+    'archived_student_test@internal.invalid',
+    'PROV-001',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid,
+    'Provision into archived note',
+    '00000000-0000-4000-8000-000000000000'::uuid
+  )$$,
+  '22023',
+  'Cannot provision student: Target academic group is archived',
+  'provision_student_tx rejects archived target group'
+);
+
+-- Test 37: provision_student_tx succeeds into active non-archived group (Group B)
+SELECT extensions.lives_ok(
+  $$SELECT public.provision_student_tx(
+    '55555555-5555-4555-8555-555555555555'::uuid,
+    'Active Student Test',
+    'طالب اختبار نشط',
+    '0500000002',
+    'active_student_test',
+    'active_student_test@internal.invalid',
+    'PROV-002',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'::uuid,
+    'Provision into active group note',
+    '00000000-0000-4000-8000-000000000000'::uuid
+  )$$,
+  'provision_student_tx succeeds into active group'
+);
+
+-- Test 38: Verify student membership created by provision_student_tx
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.group_students WHERE group_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2' AND student_id = '55555555-5555-4555-8555-555555555555'),
+  1,
+  'provision_student_tx creates junction group membership'
+);
+RESET ROLE;
+
+-- Test 39: Non-service_role (teacher) cannot execute provision_student_tx directly
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.provision_student_tx(
+    '66666666-6666-4666-8666-666666666666'::uuid,
+    'Direct Teacher Attack',
+    'محاولة معلم مباشرة',
+    NULL,
+    'direct_teacher_attack',
+    'direct_teacher_attack@internal.invalid',
+    NULL,
+    NULL,
+    NULL,
+    '11111111-1111-4111-8111-111111111111'::uuid
+  )$$,
+  '42501',
+  NULL,
+  'Teacher cannot directly execute provision_student_tx'
+);
+
+-- Test 40: Non-service_role (student) cannot execute provision_student_tx directly
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.provision_student_tx(
+    '77777777-7777-4777-8777-777777777777'::uuid,
+    'Direct Student Attack',
+    'محاولة طالب مباشرة',
+    NULL,
+    'direct_student_attack',
+    'direct_student_attack@internal.invalid',
+    NULL,
+    NULL,
+    NULL,
+    '22222222-2222-4222-8222-222222222222'::uuid
+  )$$,
+  '42501',
+  NULL,
+  'Student cannot directly execute provision_student_tx'
 );
 RESET ROLE;
 

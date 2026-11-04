@@ -7,6 +7,12 @@ on:
     paths:
       - "supabase/**"
       - ".github/workflows/db-integration.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "supabase/**"
+      - ".github/workflows/db-integration.yml"
   workflow_dispatch:
 
 permissions:
