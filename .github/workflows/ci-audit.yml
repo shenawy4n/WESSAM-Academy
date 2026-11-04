@@ -62,7 +62,8 @@ jobs:
             20261103000006_student_group_management_rpcs.sql \
             20261104000001_soft_archive_groups.sql \
             20261104000002_harden_group_archive_authorization.sql \
-            20261104000003_secure_archive_rpc_authorization.sql
+            20261104000003_secure_archive_rpc_authorization.sql \
+            20261104000004_minimize_archive_authorization_privileges.sql
           do
             test -f "supabase/migrations/$migration" || {
               echo "::error::Missing migration: $migration"
