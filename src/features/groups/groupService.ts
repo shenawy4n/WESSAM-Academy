@@ -5,6 +5,8 @@
 
 import { supabase } from '../../lib/supabase/client';
 
+export type GroupStatusFilter = 'all' | 'active' | 'inactive' | 'archived';
+
 export interface GroupRecord {
   id: string;
   name: string;
@@ -13,9 +15,16 @@ export interface GroupRecord {
   academicYear: string;
   maxStudents: number;
   isActive: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
   createdAt: string;
   updatedAt: string;
   studentCount: number;
+}
+
+export function isGroupArchived(group: { archivedAt?: string | null }): boolean {
+  return Boolean(group.archivedAt);
 }
 
 export interface GroupStudentMember {
@@ -52,6 +61,9 @@ const PREVIEW_DEMO_GROUPS: GroupRecord[] = [
     academicYear: '2026/2027',
     maxStudents: 25,
     isActive: true,
+    archivedAt: null,
+    archivedBy: null,
+    archiveReason: null,
     createdAt: '2026-08-15T10:00:00Z',
     updatedAt: '2026-08-15T10:00:00Z',
     studentCount: 2,
@@ -64,6 +76,9 @@ const PREVIEW_DEMO_GROUPS: GroupRecord[] = [
     academicYear: '2026/2027',
     maxStudents: 30,
     isActive: true,
+    archivedAt: null,
+    archivedBy: null,
+    archiveReason: null,
     createdAt: '2026-08-20T10:00:00Z',
     updatedAt: '2026-08-20T10:00:00Z',
     studentCount: 1,
@@ -76,18 +91,24 @@ const PREVIEW_DEMO_GROUPS: GroupRecord[] = [
     academicYear: '2026/2027',
     maxStudents: 30,
     isActive: false,
+    archivedAt: null,
+    archivedBy: null,
+    archiveReason: null,
     createdAt: '2026-08-25T10:00:00Z',
     updatedAt: '2026-08-25T10:00:00Z',
     studentCount: 0,
   },
 ];
 
-export async function fetchGroups(): Promise<GroupRecord[]> {
+export async function fetchGroups(filter: GroupStatusFilter = 'all'): Promise<GroupRecord[]> {
   if (!supabase) {
-    return PREVIEW_DEMO_GROUPS;
+    if (filter === 'active') return PREVIEW_DEMO_GROUPS.filter((g) => g.isActive && !g.archivedAt);
+    if (filter === 'inactive') return PREVIEW_DEMO_GROUPS.filter((g) => !g.isActive && !g.archivedAt);
+    if (filter === 'archived') return PREVIEW_DEMO_GROUPS.filter((g) => Boolean(g.archivedAt));
+    return PREVIEW_DEMO_GROUPS.filter((g) => !g.archivedAt);
   }
 
-  const { data: groups, error } = await supabase
+  let query = supabase
     .from('groups')
     .select(`
       id,
@@ -97,10 +118,26 @@ export async function fetchGroups(): Promise<GroupRecord[]> {
       academic_year,
       max_students,
       is_active,
+      archived_at,
+      archived_by,
+      archive_reason,
       created_at,
       updated_at
     `)
     .order('created_at', { ascending: false });
+
+  if (filter === 'active') {
+    query = query.eq('is_active', true).is('archived_at', null);
+  } else if (filter === 'inactive') {
+    query = query.eq('is_active', false).is('archived_at', null);
+  } else if (filter === 'archived') {
+    query = query.not('archived_at', 'is', null);
+  } else {
+    // Default 'all' excludes archived groups unless specifically requested
+    query = query.is('archived_at', null);
+  }
+
+  const { data: groups, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch academic groups: ${error.message}`);
@@ -130,6 +167,9 @@ export async function fetchGroups(): Promise<GroupRecord[]> {
     academicYear: g.academic_year,
     maxStudents: g.max_students || 30,
     isActive: g.is_active,
+    archivedAt: g.archived_at,
+    archivedBy: g.archived_by,
+    archiveReason: g.archive_reason,
     createdAt: g.created_at,
     updatedAt: g.updated_at,
     studentCount: countMap.get(g.id) || 0,
@@ -319,12 +359,45 @@ export async function fetchGroupDetails(groupId: string): Promise<GroupDetailedV
     academicYear: g.academic_year,
     maxStudents: g.max_students || 30,
     isActive: g.is_active,
+    archivedAt: g.archived_at,
+    archivedBy: g.archived_by,
+    archiveReason: g.archive_reason,
     createdAt: g.created_at,
     updatedAt: g.updated_at,
     studentCount: roster.length,
     roster,
     assignedCourses,
   };
+}
+
+export async function archiveGroup(params: {
+  groupId: string;
+  reason: string;
+}): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase.rpc('archive_group', {
+    p_group_id: params.groupId,
+    p_reason: params.reason.trim(),
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to archive group');
+  }
+}
+
+export async function restoreGroup(params: {
+  groupId: string;
+}): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase.rpc('restore_group', {
+    p_group_id: params.groupId,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to restore group');
+  }
 }
 
 export async function enrollStudentInGroup(params: {
@@ -334,30 +407,14 @@ export async function enrollStudentInGroup(params: {
 }): Promise<void> {
   if (!supabase) return;
 
-  // Try RPC first
-  const { error: rpcErr } = await supabase.rpc('enroll_student_in_group', {
+  const { error } = await supabase.rpc('enroll_student_in_group', {
     p_student_id: params.studentId,
     p_group_id: params.groupId,
     p_set_as_primary: params.setAsPrimary ?? false,
   });
 
-  if (!rpcErr) return;
-
-  // Direct table fallback
-  const { error: insertErr } = await supabase
-    .from('group_students')
-    .insert({
-      group_id: params.groupId,
-      student_id: params.studentId,
-    });
-
-  if (insertErr) throw new Error(insertErr.message);
-
-  if (params.setAsPrimary) {
-    await supabase
-      .from('student_academic_profiles')
-      .update({ group_id: params.groupId, updated_at: new Date().toISOString() })
-      .eq('profile_id', params.studentId);
+  if (error) {
+    throw new Error(error.message || 'Failed to enroll student in group');
   }
 }
 
@@ -367,20 +424,14 @@ export async function removeStudentFromGroup(params: {
 }): Promise<void> {
   if (!supabase) return;
 
-  const { error: rpcErr } = await supabase.rpc('remove_student_from_group', {
+  const { error } = await supabase.rpc('remove_student_from_group', {
     p_student_id: params.studentId,
     p_group_id: params.groupId,
   });
 
-  if (!rpcErr) return;
-
-  const { error: delErr } = await supabase
-    .from('group_students')
-    .delete()
-    .eq('group_id', params.groupId)
-    .eq('student_id', params.studentId);
-
-  if (delErr) throw new Error(delErr.message);
+  if (error) {
+    throw new Error(error.message || 'Failed to remove student from group');
+  }
 }
 
 export async function transferStudentGroup(params: {
@@ -390,29 +441,13 @@ export async function transferStudentGroup(params: {
 }): Promise<void> {
   if (!supabase) return;
 
-  const { error: rpcErr } = await supabase.rpc('transfer_student_group', {
+  const { error } = await supabase.rpc('transfer_student_group', {
     p_student_id: params.studentId,
     p_from_group_id: params.fromGroupId,
     p_to_group_id: params.toGroupId,
   });
 
-  if (!rpcErr) return;
-
-  // Manual fallback transaction
-  await supabase
-    .from('group_students')
-    .delete()
-    .eq('group_id', params.fromGroupId)
-    .eq('student_id', params.studentId);
-
-  const { error: insErr } = await supabase
-    .from('group_students')
-    .insert({ group_id: params.toGroupId, student_id: params.studentId });
-
-  if (insErr) throw new Error(insErr.message);
-
-  await supabase
-    .from('student_academic_profiles')
-    .update({ group_id: params.toGroupId, updated_at: new Date().toISOString() })
-    .eq('profile_id', params.studentId);
+  if (error) {
+    throw new Error(error.message || 'Failed to transfer student between groups');
+  }
 }

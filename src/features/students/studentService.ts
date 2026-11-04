@@ -260,8 +260,7 @@ export async function updateStudentDetails(params: {
 }): Promise<void> {
   if (!supabase) return;
 
-  // Prefer atomic RPC if available
-  const { error: rpcErr } = await supabase.rpc('update_student_details', {
+  const { error } = await supabase.rpc('update_student_details', {
     p_student_id: params.studentId,
     p_full_name: params.fullName.trim(),
     p_full_name_arabic: params.fullNameArabic ? params.fullNameArabic.trim() : params.fullName.trim(),
@@ -270,32 +269,9 @@ export async function updateStudentDetails(params: {
     p_notes: params.notes ? params.notes.trim() : null,
   });
 
-  if (!rpcErr) return;
-
-  // Fallback to direct table updates
-  const { error: profileErr } = await supabase
-    .from('profiles')
-    .update({
-      full_name: params.fullName.trim(),
-      full_name_arabic: params.fullNameArabic ? params.fullNameArabic.trim() : params.fullName.trim(),
-      phone: params.phone ? params.phone.trim() : null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', params.studentId)
-    .eq('role', 'student');
-
-  if (profileErr) throw new Error(profileErr.message);
-
-  const { error: acadErr } = await supabase
-    .from('student_academic_profiles')
-    .update({
-      student_number: params.studentNumber ? params.studentNumber.trim() : null,
-      notes: params.notes ? params.notes.trim() : null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('profile_id', params.studentId);
-
-  if (acadErr) throw new Error(acadErr.message);
+  if (error) {
+    throw new Error(error.message || 'Failed to update student details');
+  }
 }
 
 export async function updateStudentStatus(params: {
@@ -305,28 +281,15 @@ export async function updateStudentStatus(params: {
 }): Promise<void> {
   if (!supabase) return;
 
-  // Prefer atomic RPC which syncs profiles, academic profile, and credentials
-  const { error: rpcErr } = await supabase.rpc('update_student_status', {
+  const { error } = await supabase.rpc('update_student_status', {
     p_student_id: params.studentId,
     p_status: params.status,
     p_reason: params.reason || null,
   });
 
-  if (!rpcErr) return;
-
-  // Direct table fallback
-  const { error: pErr } = await supabase
-    .from('profiles')
-    .update({ status: params.status, updated_at: new Date().toISOString() })
-    .eq('id', params.studentId)
-    .eq('role', 'student');
-
-  if (pErr) throw new Error(pErr.message);
-
-  await supabase
-    .from('student_academic_profiles')
-    .update({ status: params.status, updated_at: new Date().toISOString() })
-    .eq('profile_id', params.studentId);
+  if (error) {
+    throw new Error(error.message || 'Failed to update student status');
+  }
 }
 
 export async function resetStudentPassword(params: {

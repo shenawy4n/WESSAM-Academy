@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { useLocale } from '../../hooks/useLocale';
-import { useAuth } from '../../features/auth/AuthContext';
+import { useAuth, ENABLE_PREVIEW_ROLES } from '../../features/auth/AuthContext';
 import { LanguageSwitcher } from '../shared/LanguageSwitcher';
 import { Menu, Clock, ShieldCheck, UserCheck } from 'lucide-react';
 
@@ -45,8 +45,8 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, pageTitle }) =>
           <span>{t.common.timezoneNotice}</span>
         </div>
 
-        {/* Phase 1 Portal Switcher (For administrative previewing of teacher vs student views) */}
-        {setActiveTestRole && (
+        {/* Phase 1 Portal Switcher (strictly gated by DEV && VITE_ENABLE_PREVIEW_ROLES) */}
+        {ENABLE_PREVIEW_ROLES && setActiveTestRole && (
           <div className="hidden sm:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-medium">
             <button
               onClick={() => setActiveTestRole('teacher')}

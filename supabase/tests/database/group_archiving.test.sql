@@ -1,0 +1,288 @@
+-- ==============================================================================
+-- Integration tests for migration 20261104000001 (Group Soft Archiving)
+-- Executed against disposable Supabase database in CI / local test harness.
+-- ==============================================================================
+BEGIN;
+
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT extensions.plan(25);
+
+-- ------------------------------------------------------------------------------
+-- 1. SETUP DETERMINISTIC IDENTITIES
+-- ------------------------------------------------------------------------------
+INSERT INTO auth.users (
+  id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) VALUES
+  ('00000000-0000-4000-8000-000000000000', 'authenticated', 'authenticated', 'superadmin@test.invalid', '', now(), '{"role":"super_admin"}'::jsonb, '{}'::jsonb, now(), now()),
+  ('11111111-1111-4111-8111-111111111111', 'authenticated', 'authenticated', 'teacher@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('22222222-2222-4222-8222-222222222222', 'authenticated', 'authenticated', 'student1@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('33333333-3333-4333-8333-333333333333', 'authenticated', 'authenticated', 'student2@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.profiles (id, role, full_name, full_name_arabic, status)
+VALUES
+  ('00000000-0000-4000-8000-000000000000', 'super_admin', 'Super Admin Auditor', 'مشرف عام النظام', 'active'),
+  ('11111111-1111-4111-8111-111111111111', 'teacher', 'Teacher Auditor', 'مدرس التدقيق', 'active'),
+  ('22222222-2222-4222-8222-222222222222', 'student', 'Student One', 'طالب أول', 'active'),
+  ('33333333-3333-4333-8333-333333333333', 'student', 'Student Two', 'طالب ثان', 'active')
+ON CONFLICT (id) DO NOTHING;
+
+-- Test Groups:
+-- Group A (active, will be archived)
+-- Group B (active destination)
+-- Group C (inactive, cannot be archived)
+INSERT INTO public.groups (id, name, name_arabic, max_students, is_active)
+VALUES
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Cohort Alpha', 'الفصل ألفا', 10, true),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'Cohort Beta', 'الفصل بيتا', 10, true),
+  ('cccccccc-cccc-4ccc-8ccc-ccccccccccc3', 'Cohort Inactive', 'فصل غير نشط', 10, false)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.student_academic_profiles (profile_id, username, student_number, group_id)
+VALUES
+  ('22222222-2222-4222-8222-222222222222', 'student_alpha_1', 'ARC-001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  ('33333333-3333-4333-8333-333333333333', 'student_alpha_2', 'ARC-002', NULL)
+ON CONFLICT (profile_id) DO NOTHING;
+
+INSERT INTO public.group_students (group_id, student_id, joined_at)
+VALUES
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '22222222-2222-4222-8222-222222222222', now())
+ON CONFLICT (group_id, student_id) DO NOTHING;
+
+-- ------------------------------------------------------------------------------
+-- 2. SECURITY TEST SCENARIOS
+-- ------------------------------------------------------------------------------
+
+-- Test 1: Teacher cannot archive group
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Audit archive attempt')$$,
+  '42501',
+  'Unauthorized: Only super admins can archive groups',
+  'Teacher is strictly forbidden from archiving groups'
+);
+RESET ROLE;
+
+-- Test 2: Student cannot archive group
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Student hack')$$,
+  '42501',
+  'Unauthorized: Only super admins can archive groups',
+  'Student is strictly forbidden from archiving groups'
+);
+RESET ROLE;
+
+-- Test 3: Anon cannot archive group
+SET LOCAL ROLE anon;
+SELECT extensions.throws_ok(
+  $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Anon attempt')$$,
+  '42501',
+  'Unauthorized: Only super admins can archive groups',
+  'Anon caller is rejected'
+);
+RESET ROLE;
+
+-- Test 4: Super admin cannot archive with empty reason
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '   ')$$,
+  '22023',
+  'Archive reason is required',
+  'Whitespace reason is rejected'
+);
+
+-- Test 5: Super admin cannot archive with NULL reason
+SELECT extensions.throws_ok(
+  $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', NULL)$$,
+  '22023',
+  'Archive reason is required',
+  'NULL reason is rejected'
+);
+
+-- Test 6: Super admin cannot archive nonexistent group
+SELECT extensions.throws_ok(
+  $$SELECT public.archive_group('99999999-9999-4999-8999-999999999999', 'Reason')$$,
+  'P0002',
+  'Academic group not found',
+  'Nonexistent group is rejected'
+);
+
+-- Test 7: Super admin cannot archive inactive group
+SELECT extensions.throws_ok(
+  $$SELECT public.archive_group('cccccccc-cccc-4ccc-8ccc-ccccccccccc3', 'Archive inactive')$$,
+  '22023',
+  'Cannot archive an inactive group. Group must be active before archiving',
+  'Inactive group cannot be archived'
+);
+
+-- Test 8: Super admin successfully archives active group
+SELECT extensions.lives_ok(
+  $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Semester completed 2026')$$,
+  'Super Admin can archive active group'
+);
+RESET ROLE;
+
+-- Test 9: Verify archived_at is NOT NULL
+SELECT extensions.isnt(
+  (SELECT archived_at FROM public.groups WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  NULL,
+  'Group archived_at timestamp is set'
+);
+
+-- Test 10: Verify archived_by is set to Super Admin UID
+SELECT extensions.is(
+  (SELECT archived_by FROM public.groups WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  '00000000-0000-4000-8000-000000000000'::uuid,
+  'Group archived_by matches Super Admin ID'
+);
+
+-- Test 11: Verify archive_reason is recorded
+SELECT extensions.is(
+  (SELECT archive_reason FROM public.groups WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  'Semester completed 2026',
+  'Group archive_reason matches input'
+);
+
+-- Test 12: Verify audit log entry exists
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.audit_logs WHERE action = 'ARCHIVE_GROUP' AND entity_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  1,
+  'Audit log entry created for ARCHIVE_GROUP'
+);
+
+-- Test 13: Idempotency of archive_group
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT extensions.is(
+  (SELECT (public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Duplicate call'))->>'message'),
+  'Group is already archived',
+  'Archiving an already archived group is idempotent'
+);
+RESET ROLE;
+
+-- Test 14: Teacher cannot enroll student into archived group
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.enroll_student_in_group(
+    '33333333-3333-4333-8333-333333333333',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+    false
+  )$$,
+  '22023',
+  'Cannot enroll student: Target academic group is archived',
+  'Enrollment in archived group is rejected'
+);
+
+-- Test 15: Teacher cannot transfer student into archived group
+SELECT extensions.throws_ok(
+  $$SELECT public.transfer_student_group(
+    '33333333-3333-4333-8333-333333333333',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+  )$$,
+  '22023',
+  'Cannot transfer student: Destination group is archived',
+  'Transfer into archived group is rejected'
+);
+
+-- Test 16: Teacher CAN transfer student OUT of archived group into active group
+SELECT extensions.lives_ok(
+  $$SELECT public.transfer_student_group(
+    '22222222-2222-4222-8222-222222222222',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'
+  )$$,
+  'Transfer out of archived group into active group succeeds'
+);
+RESET ROLE;
+
+-- Test 17: Destination membership created
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.group_students WHERE group_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2' AND student_id = '22222222-2222-4222-8222-222222222222'),
+  1,
+  'Student successfully transferred to active destination group'
+);
+
+-- Test 18: Direct hard delete blocked on public.groups for teacher
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+DELETE FROM public.groups WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+RESET ROLE;
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.groups WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'),
+  1,
+  'Direct DELETE on public.groups fails to delete row for teacher (RLS protected)'
+);
+
+-- Test 19: Direct hard delete blocked on public.groups even for super_admin via RESTRICTIVE policy
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+DELETE FROM public.groups WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+RESET ROLE;
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.groups WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'),
+  1,
+  'Direct DELETE blocked by RESTRICTIVE policy for all authenticated users'
+);
+
+-- Test 20: Teacher cannot restore group
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.restore_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1')$$,
+  '42501',
+  'Unauthorized: Only super admins can restore archived groups',
+  'Teacher cannot restore archived group'
+);
+
+-- Test 21: Student cannot restore group
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+SELECT extensions.throws_ok(
+  $$SELECT public.restore_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1')$$,
+  '42501',
+  'Unauthorized: Only super admins can restore archived groups',
+  'Student cannot restore archived group'
+);
+
+-- Test 22: Super admin can restore group
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT extensions.lives_ok(
+  $$SELECT public.restore_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1')$$,
+  'Super Admin can restore archived group'
+);
+RESET ROLE;
+
+-- Test 23: Verify archive metadata cleared
+SELECT extensions.is(
+  (SELECT archived_at FROM public.groups WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  NULL,
+  'Group archived_at is reset to NULL'
+);
+
+-- Test 24: Verify audit log entry for RESTORE_GROUP
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.audit_logs WHERE action = 'RESTORE_GROUP' AND entity_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  1,
+  'Audit log entry created for RESTORE_GROUP'
+);
+
+-- Test 25: Restored group can accept enrollments again
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.lives_ok(
+  $$SELECT public.enroll_student_in_group(
+    '33333333-3333-4333-8333-333333333333',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+    false
+  )$$,
+  'Restored group can accept new student enrollments'
+);
+RESET ROLE;
+
+ROLLBACK;

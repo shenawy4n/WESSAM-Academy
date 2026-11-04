@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useLocale } from '../../hooks/useLocale';
-import { useAuth } from './AuthContext';
+import { useAuth, ENABLE_PREVIEW_ROLES } from './AuthContext';
 import { BrandLogo } from '../../components/shared/BrandLogo';
 import { LanguageSwitcher } from '../../components/shared/LanguageSwitcher';
 import { Button } from '../../components/ui/Button';
@@ -190,8 +190,8 @@ export const LoginScreen: React.FC = () => {
             </p>
           </div>
 
-          {/* Quick Preview Entry for Phase 1 Inspection */}
-          {setActiveTestRole && (
+          {/* Quick Preview Entry for Phase 1 Inspection (strictly gated by DEV && VITE_ENABLE_PREVIEW_ROLES) */}
+          {ENABLE_PREVIEW_ROLES && setActiveTestRole && (
             <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
               <span className="text-[10px] text-slate-400 font-medium text-center uppercase tracking-wider">
                 {isRtl ? 'معاينة الواجهات الأكاديمية (Phase 1 Inspection)' : 'Phase 1 Portal Preview'}

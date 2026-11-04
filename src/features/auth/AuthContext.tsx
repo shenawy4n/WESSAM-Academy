@@ -22,6 +22,9 @@ interface AuthContextType {
   setActiveTestRole?: (role: UserRole | null) => void;
 }
 
+export const ENABLE_PREVIEW_ROLES =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_PREVIEW_ROLES === 'true';
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -209,6 +212,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setActiveTestRole = (newRole: UserRole | null) => {
+    if (!ENABLE_PREVIEW_ROLES) {
+      console.warn('Test role impersonation is disabled in this environment.');
+      return;
+    }
+
     if (!newRole) {
       setUser(null);
       setStudentProfile(null);
@@ -283,7 +291,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginTeacher,
         loginStudent,
         logout,
-        setActiveTestRole,
+        setActiveTestRole: ENABLE_PREVIEW_ROLES ? setActiveTestRole : undefined,
       }}
     >
       {children}

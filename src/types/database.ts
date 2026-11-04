@@ -13,6 +13,9 @@ export interface Group {
   academicYear: string;
   maxStudents?: number;
   isActive: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }

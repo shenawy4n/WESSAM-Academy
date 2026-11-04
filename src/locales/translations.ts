@@ -227,6 +227,19 @@ export interface Translations {
     noStudentsInGroup: string;
     noCoursesAssigned: string;
     capacityLimitReached: string;
+    archiveGroup: string;
+    restoreGroup: string;
+    archived: string;
+    archiveModalTitle: string;
+    archiveModalSubtitle: string;
+    archiveReasonLabel: string;
+    archiveReasonPlaceholder: string;
+    archiveWarning: string;
+    archiveSuccess: string;
+    restoreSuccess: string;
+    archivedBadge: string;
+    cannotArchiveInactive: string;
+    cannotEnrollArchived: string;
   };
 }
 
@@ -452,6 +465,19 @@ export const translations: Record<Language, Translations> = {
       noStudentsInGroup: 'لا يوجد طلاب مسجلون في هذه المجموعة حالياً.',
       noCoursesAssigned: 'لم يتم ربط مقررات دراسية بهذه المجموعة بعد.',
       capacityLimitReached: 'تم بلوغ الحد الأقصى للطاقة الاستيعابية لهذه المجموعة.',
+      archiveGroup: 'أرشفة المجموعة الدراسية',
+      restoreGroup: 'استعادة المجموعة المؤرشفة',
+      archived: 'المؤرشفة',
+      archiveModalTitle: 'تأكيد أرشفة المجموعة الدراسية بأمان',
+      archiveModalSubtitle: 'الأرشفة الآمنة تحافظ على سجلات الطلاب والجلسات والتكاليف دون حذف أي بيانات',
+      archiveReasonLabel: 'سبب الأرشفة (مطلوب للتوثيق الإداري)',
+      archiveReasonPlaceholder: 'اكتب سبب أرشفة المجموعة (مثال: انتهاء الفصل الدراسي، دمج الفصول)...',
+      archiveWarning: 'تنبيه: أرشفة المجموعة ستمنع تسكين طلاب جدد فيها أو النقل إليها. تظل جميع سجلات الحضور والتكاليف والجلسات المباشرة محفوظة بالكامل ويمكن استعادتها لاحقاً.',
+      archiveSuccess: 'تمت أرشفة المجموعة الدراسية بنجاح مع الحفاظ على كافة السجلات',
+      restoreSuccess: 'تمت استعادة المجموعة الدراسية بنجاح وأصبحت نشطة مجدداً',
+      archivedBadge: 'مؤرشفة',
+      cannotArchiveInactive: 'لا يمكن أرشفة مجموعة غير نشطة. يجب أن تكون المجموعة نشطة أولاً.',
+      cannotEnrollArchived: 'لا يمكن تسكين طلاب في مجموعة مؤرشفة.',
     },
   },
   en: {
@@ -675,6 +701,19 @@ export const translations: Record<Language, Translations> = {
       noStudentsInGroup: 'No students are currently enrolled in this group.',
       noCoursesAssigned: 'No courses have been linked to this group yet.',
       capacityLimitReached: 'This group has reached its maximum student capacity.',
+      archiveGroup: 'Archive Academic Group',
+      restoreGroup: 'Restore Archived Group',
+      archived: 'Archived',
+      archiveModalTitle: 'Confirm Safe Group Archiving',
+      archiveModalSubtitle: 'Soft archiving preserves all historical student records, attendance, and assignments without deletion',
+      archiveReasonLabel: 'Archive Reason (Required for administrative audit)',
+      archiveReasonPlaceholder: 'State reason for archiving (e.g. term completion, cohort merge)...',
+      archiveWarning: 'Notice: Archiving this group will prevent new student enrollments and transfers in. All student attendance records, assignments, and live sessions are fully preserved and the group can be restored anytime.',
+      archiveSuccess: 'Group successfully archived with all historical records preserved',
+      restoreSuccess: 'Group successfully restored and reactivated for coursework',
+      archivedBadge: 'Archived',
+      cannotArchiveInactive: 'Cannot archive an inactive group. The group must be active before archiving.',
+      cannotEnrollArchived: 'Cannot enroll students into an archived group.',
     },
   },
 };

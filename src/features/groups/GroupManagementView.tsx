@@ -5,12 +5,17 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocale } from '../../hooks/useLocale';
+import { useAuth } from '../auth/AuthContext';
 import {
   GroupRecord,
   GroupDetailedView,
+  GroupStatusFilter,
   fetchGroups,
   createGroup,
   updateGroup,
+  archiveGroup,
+  restoreGroup,
+  isGroupArchived,
   fetchGroupDetails,
   enrollStudentInGroup,
   removeStudentFromGroup,
@@ -40,10 +45,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 
 export const GroupManagementView: React.FC = () => {
   const { t, isRtl } = useLocale();
+  const { role } = useAuth();
+  const isSuperAdmin = role === 'super_admin';
 
   // Data states
   const [groups, setGroups] = useState<GroupRecord[]>([]);
@@ -87,6 +96,13 @@ export const GroupManagementView: React.FC = () => {
   const [formSubmitting, setFormSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Archive Modal State (Super Admin Only)
+  const [isArchiveOpen, setIsArchiveOpen] = useState<boolean>(false);
+  const [archiveTargetGroup, setArchiveTargetGroup] = useState<GroupRecord | null>(null);
+  const [archiveReason, setArchiveReason] = useState<string>('');
+  const [archiveSubmitting, setArchiveSubmitting] = useState<boolean>(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+
   // Enrollment & Transfer Modals
   const [isEnrollOpen, setIsEnrollOpen] = useState<boolean>(false);
   const [enrollStudentId, setEnrollStudentId] = useState<string>('');
@@ -106,12 +122,12 @@ export const GroupManagementView: React.FC = () => {
   const [removeSubmitting, setRemoveSubmitting] = useState<boolean>(false);
 
   // Load groups and students
-  const loadInitialData = async () => {
+  const loadInitialData = async (filter: GroupStatusFilter = statusFilter as GroupStatusFilter) => {
     try {
       setLoading(true);
       setError(null);
       const [groupsData, studentsData] = await Promise.all([
-        fetchGroups(),
+        fetchGroups(filter),
         fetchStudents(),
       ]);
       setGroups(groupsData);
@@ -125,8 +141,8 @@ export const GroupManagementView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    loadInitialData(statusFilter as GroupStatusFilter);
+  }, [statusFilter]);
 
   const showToast = (msg: string) => {
     setSuccessToast(msg);
@@ -154,17 +170,74 @@ export const GroupManagementView: React.FC = () => {
     try {
       const details = await fetchGroupDetails(groupId);
       setGroupDetails(details);
-      const updatedGroups = await fetchGroups();
+      const updatedGroups = await fetchGroups(statusFilter as GroupStatusFilter);
       setGroups(updatedGroups);
     } catch (err) {
       console.error('Error refreshing details:', err);
     }
   };
 
+  // Archive Handlers (Super Admin Only)
+  const handleOpenArchive = (group: GroupRecord) => {
+    if (!group.isActive) {
+      setError(t.groups.cannotArchiveInactive);
+      return;
+    }
+    setArchiveTargetGroup(group);
+    setArchiveReason('');
+    setArchiveError(null);
+    setIsArchiveOpen(true);
+  };
+
+  const handleArchiveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!archiveTargetGroup) return;
+    if (!archiveReason.trim()) {
+      setArchiveError(t.groups.archiveReasonLabel);
+      return;
+    }
+
+    try {
+      setArchiveSubmitting(true);
+      setArchiveError(null);
+      await archiveGroup({
+        groupId: archiveTargetGroup.id,
+        reason: archiveReason.trim(),
+      });
+      setIsArchiveOpen(false);
+      setArchiveTargetGroup(null);
+      showToast(t.groups.archiveSuccess);
+      await loadInitialData(statusFilter as GroupStatusFilter);
+      if (selectedGroupId === archiveTargetGroup.id) {
+        await refreshDetails(selectedGroupId);
+      }
+    } catch (err: any) {
+      setArchiveError(err?.message || 'Failed to archive group');
+    } finally {
+      setArchiveSubmitting(false);
+    }
+  };
+
+  const handleRestoreSubmit = async (group: GroupRecord) => {
+    try {
+      setLoading(true);
+      await restoreGroup({ groupId: group.id });
+      showToast(t.groups.restoreSuccess);
+      await loadInitialData(statusFilter as GroupStatusFilter);
+      if (selectedGroupId === group.id) {
+        await refreshDetails(selectedGroupId);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to restore group');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Metric computations
   const metrics = useMemo(() => {
     const total = groups.length;
-    const active = groups.filter((g) => g.isActive).length;
+    const active = groups.filter((g) => g.isActive && !g.archivedAt).length;
     const totalEnrolled = groups.reduce((acc, g) => acc + g.studentCount, 0);
     const totalCapacity = groups.reduce((acc, g) => acc + g.maxStudents, 0);
     const avgCap = totalCapacity > 0 ? Math.round((totalEnrolled / totalCapacity) * 100) : 0;
@@ -189,9 +262,13 @@ export const GroupManagementView: React.FC = () => {
 
       const matchYear = yearFilter === 'all' || g.academicYear === yearFilter;
       const matchStatus =
-        statusFilter === 'all' ||
-        (statusFilter === 'active' && g.isActive) ||
-        (statusFilter === 'inactive' && !g.isActive);
+        statusFilter === 'all'
+          ? !g.archivedAt
+          : statusFilter === 'archived'
+          ? Boolean(g.archivedAt)
+          : statusFilter === 'active'
+          ? g.isActive && !g.archivedAt
+          : !g.isActive && !g.archivedAt;
 
       return matchSearch && matchYear && matchStatus;
     });
@@ -467,6 +544,7 @@ export const GroupManagementView: React.FC = () => {
             <option value="all">{t.groups.allStatuses}</option>
             <option value="active">{t.common.active}</option>
             <option value="inactive">{t.common.inactive}</option>
+            <option value="archived">{t.groups.archived}</option>
           </select>
         </div>
       </div>
@@ -494,11 +572,14 @@ export const GroupManagementView: React.FC = () => {
                 ? Math.min(100, Math.round((group.studentCount / group.maxStudents) * 100))
                 : 0;
             const isFull = group.studentCount >= group.maxStudents;
+            const isArchived = Boolean(group.archivedAt);
 
             return (
               <div
                 key={group.id}
-                className="bg-white rounded-xl border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow p-5 flex flex-col justify-between"
+                className={`bg-white rounded-xl border shadow-xs hover:shadow-md transition-shadow p-5 flex flex-col justify-between ${
+                  isArchived ? 'border-amber-200/90 bg-amber-50/20' : 'border-slate-200/90'
+                }`}
               >
                 <div>
                   {/* Top line with Year badge & Status */}
@@ -506,18 +587,25 @@ export const GroupManagementView: React.FC = () => {
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
                       {group.academicYear}
                     </span>
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-xs font-bold ${
-                        group.isActive ? 'text-emerald-700' : 'text-slate-400'
-                      }`}
-                    >
+                    {isArchived ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                        <Archive className="w-3 h-3 text-amber-600" />
+                        <span>{t.groups.archivedBadge}</span>
+                      </span>
+                    ) : (
                       <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          group.isActive ? 'bg-emerald-500' : 'bg-slate-300'
+                        className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+                          group.isActive ? 'text-emerald-700' : 'text-slate-400'
                         }`}
-                      />
-                      {group.isActive ? t.common.active : t.common.inactive}
-                    </span>
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            group.isActive ? 'bg-emerald-500' : 'bg-slate-300'
+                          }`}
+                        />
+                        {group.isActive ? t.common.active : t.common.inactive}
+                      </span>
+                    )}
                   </div>
 
                   {/* Group Name & Description */}
@@ -532,6 +620,13 @@ export const GroupManagementView: React.FC = () => {
                     <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
                       {group.description}
                     </p>
+                  )}
+
+                  {isArchived && group.archiveReason && (
+                    <div className="mt-2.5 p-2 rounded-lg bg-amber-100/60 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-1.5">
+                      <Archive className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <span className="leading-tight line-clamp-2">{group.archiveReason}</span>
+                    </div>
                   )}
                 </div>
 
@@ -549,7 +644,9 @@ export const GroupManagementView: React.FC = () => {
                   <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
-                        isFull
+                        isArchived
+                          ? 'bg-amber-400'
+                          : isFull
                           ? 'bg-rose-500'
                           : utilization > 80
                           ? 'bg-amber-500'
@@ -563,18 +660,52 @@ export const GroupManagementView: React.FC = () => {
                   <div className="flex items-center justify-between mt-4 pt-2">
                     <button
                       onClick={() => handleOpenDetails(group.id)}
-                      className="text-xs font-bold text-[#356AE6] hover:text-[#2a56bf] flex items-center gap-1.5"
+                      className="text-xs font-bold text-[#356AE6] hover:text-[#2a56bf] flex items-center gap-1.5 cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>{t.groups.groupDetails}</span>
                     </button>
-                    <button
-                      onClick={() => handleOpenEdit(group)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50"
-                      title={t.groups.editGroup}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {/* Super Admin Archive / Restore Button */}
+                      {isSuperAdmin && (
+                        isArchived ? (
+                          <button
+                            onClick={() => handleRestoreSubmit(group)}
+                            className="p-1.5 rounded-lg text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 cursor-pointer flex items-center gap-1 text-xs font-bold"
+                            title={t.groups.restoreGroup}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="hidden sm:inline">{t.groups.restoreGroup}</span>
+                          </button>
+                        ) : (
+                          <button
+                            disabled={!group.isActive}
+                            onClick={() => handleOpenArchive(group)}
+                            className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 ${
+                              group.isActive
+                                ? 'text-amber-700 hover:text-amber-800 hover:bg-amber-50 cursor-pointer'
+                                : 'text-slate-300 cursor-not-allowed'
+                            }`}
+                            title={group.isActive ? t.groups.archiveGroup : t.groups.cannotArchiveInactive}
+                          >
+                            <Archive className="w-3.5 h-3.5 text-amber-600" />
+                            <span className="hidden sm:inline">{t.groups.archiveGroup}</span>
+                          </button>
+                        )
+                      )}
+
+                      {/* Edit Group Button: hidden if group is archived */}
+                      {!isArchived && (
+                        <button
+                          onClick={() => handleOpenEdit(group)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer"
+                          title={t.groups.editGroup}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -767,13 +898,22 @@ export const GroupManagementView: React.FC = () => {
         ) : (
           <div className="space-y-6">
             {/* Top Info Card */}
+            {groupDetails.archivedAt && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5 leading-relaxed">
+                <Archive className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold mb-0.5">{t.groups.archivedBadge}: {groupDetails.archiveReason || '—'}</strong>
+                  <span className="text-amber-800">{t.groups.cannotEnrollArchived}</span>
+                </div>
+              </div>
+            )}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
               <div>
                 <p className="text-slate-600 leading-relaxed max-w-md">
                   {groupDetails.description || (isRtl ? 'لا يوجد وصف للمجموعة.' : 'No description provided.')}
                 </p>
                 <div className="flex items-center gap-3 mt-2 text-slate-400">
-                  <span>{isRtl ? 'الحالة:' : 'Status:'} <StatusIndicator status={groupDetails.isActive ? 'active' : 'inactive'} /></span>
+                  <span>{isRtl ? 'الحالة:' : 'Status:'} <StatusIndicator status={groupDetails.archivedAt ? 'inactive' : groupDetails.isActive ? 'active' : 'inactive'} /></span>
                   <span>•</span>
                   <span>{isRtl ? 'المقاعد المتبقية:' : 'Available Seats:'} <strong className="text-slate-700">{Math.max(0, groupDetails.maxStudents - groupDetails.studentCount)}</strong></span>
                 </div>
@@ -782,14 +922,15 @@ export const GroupManagementView: React.FC = () => {
               {/* Action: Enroll student button */}
               <Button
                 size="sm"
-                disabled={groupDetails.studentCount >= groupDetails.maxStudents}
+                disabled={Boolean(groupDetails.archivedAt) || groupDetails.studentCount >= groupDetails.maxStudents}
+                title={groupDetails.archivedAt ? t.groups.cannotEnrollArchived : undefined}
                 onClick={() => {
                   setEnrollStudentId('');
                   setEnrollAsPrimary(true);
                   setEnrollError(null);
                   setIsEnrollOpen(true);
                 }}
-                className="bg-[#356AE6] hover:bg-[#2a56bf] text-white flex items-center gap-1.5 shrink-0 shadow-xs"
+                className="bg-[#356AE6] hover:bg-[#2a56bf] text-white flex items-center gap-1.5 shrink-0 shadow-xs disabled:opacity-40"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>{t.groups.enrollStudentBtn}</span>
@@ -1024,7 +1165,7 @@ export const GroupManagementView: React.FC = () => {
             >
               <option value="">{isRtl ? '-- اختر المجموعة الجديدة --' : '-- Select Destination Group --'}</option>
               {groups
-                .filter((g) => g.id !== selectedGroupId && g.isActive)
+                .filter((g) => g.id !== selectedGroupId && g.isActive && !g.archivedAt)
                 .map((g) => (
                   <option key={g.id} value={g.id}>
                     {isRtl ? g.nameArabic : g.name} ({g.studentCount}/{g.maxStudents})
@@ -1087,6 +1228,75 @@ export const GroupManagementView: React.FC = () => {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* MODAL 6: ARCHIVE GROUP CONFIRMATION (SUPER ADMIN ONLY)              */}
+      {/* ------------------------------------------------------------------- */}
+      <Modal
+        isOpen={isArchiveOpen && !!archiveTargetGroup}
+        onClose={() => {
+          if (!archiveSubmitting) {
+            setIsArchiveOpen(false);
+            setArchiveTargetGroup(null);
+          }
+        }}
+        title={t.groups.archiveModalTitle}
+        subtitle={archiveTargetGroup ? (isRtl ? archiveTargetGroup.nameArabic : archiveTargetGroup.name) : ''}
+        maxWidth="md"
+      >
+        <form onSubmit={handleArchiveSubmit} className="space-y-4">
+          {archiveError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{archiveError}</span>
+            </div>
+          )}
+
+          <div className="p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 leading-relaxed">
+            <Archive className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-950 mb-1">{t.groups.archiveWarning}</p>
+              <p className="text-[11px] text-amber-800">{t.groups.archiveModalSubtitle}</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              {t.groups.archiveReasonLabel} <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={archiveReason}
+              onChange={(e) => setArchiveReason(e.target.value)}
+              placeholder={t.groups.archiveReasonPlaceholder}
+              required
+              className="w-full p-2.5 bg-slate-50 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-800"
+            />
+          </div>
+
+          <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={archiveSubmitting}
+              onClick={() => {
+                setIsArchiveOpen(false);
+                setArchiveTargetGroup(null);
+              }}
+            >
+              {t.common.cancel}
+            </Button>
+            <Button
+              type="submit"
+              disabled={archiveSubmitting || !archiveReason.trim()}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Archive className="w-4 h-4" />
+              <span>{archiveSubmitting ? t.common.loading : t.groups.archiveGroup}</span>
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );
