@@ -49,4 +49,5 @@ jobs:
           fi
           supabase functions deploy create-student \
             --project-ref "${SUPABASE_PROJECT_REF}" \
-            --use-api
+            --use-api \
+            --yes
