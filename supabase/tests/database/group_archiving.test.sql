@@ -1,12 +1,12 @@
 -- ==============================================================================
--- Integration tests for Group Soft Archiving & Authorization Hardening
--- Migrations: 20261104000001 & 20261104000002
+-- Integration tests for Group Soft Archiving & Unforgeable Authorization Hardening
+-- Migrations: 20261104000001, 20261104000002 & 20261104000003
 -- Executed against disposable Supabase database in CI / local test harness.
 -- ==============================================================================
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(40);
+SELECT extensions.plan(51);
 
 -- ------------------------------------------------------------------------------
 -- 1. SETUP DETERMINISTIC IDENTITIES
@@ -287,7 +287,7 @@ SELECT extensions.lives_ok(
 RESET ROLE;
 
 -- ------------------------------------------------------------------------------
--- 3. FIX A & B: DIRECT ARCHIVE METADATA PROTECTION & RESTORE LIFECYCLE TESTS
+-- 3. DIRECT ARCHIVE METADATA PROTECTION & RESTORE LIFECYCLE TESTS
 -- ------------------------------------------------------------------------------
 
 -- Test 26: Teacher cannot set archived_at directly via UPDATE
@@ -390,7 +390,7 @@ SELECT extensions.is(
 );
 
 -- ------------------------------------------------------------------------------
--- 4. FIX C: HARDENED provision_student_tx TESTS
+-- 4. HARDENED provision_student_tx TESTS
 -- ------------------------------------------------------------------------------
 
 -- Archive Group A again to test provision_student_tx rejection on archived group
@@ -485,5 +485,128 @@ SELECT extensions.throws_ok(
   'Student cannot directly execute provision_student_tx'
 );
 RESET ROLE;
+
+-- ------------------------------------------------------------------------------
+-- 5. SEC-03 FINAL AUTHORIZATION HARDENING: UNFORGEABLE LEDGER TESTS
+-- ------------------------------------------------------------------------------
+
+-- Test 41: Adversarial Test A — Custom GUC forgery by Super Admin is strictly rejected
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT set_config('wessam.internal_archive_op', 'true', true);
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_at = now() WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Super Admin cannot bypass archive trigger by setting wessam.internal_archive_op GUC'
+);
+RESET ROLE;
+
+-- Test 42: Adversarial Test B — Teacher cannot insert into internal authorization table
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT extensions.throws_ok(
+  $$INSERT INTO public.group_archive_authorizations (group_id, operation) VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'ARCHIVE')$$,
+  '42501',
+  NULL,
+  'Teacher cannot insert authorization records into internal table'
+);
+
+-- Test 43: Teacher cannot select from internal authorization table
+SELECT extensions.throws_ok(
+  $$SELECT count(*) FROM public.group_archive_authorizations$$,
+  '42501',
+  NULL,
+  'Teacher cannot read from internal authorization table'
+);
+RESET ROLE;
+
+-- Test 44: Adversarial Test C — Student cannot insert into internal authorization table
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+SELECT extensions.throws_ok(
+  $$INSERT INTO public.group_archive_authorizations (group_id, operation) VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'ARCHIVE')$$,
+  '42501',
+  NULL,
+  'Student cannot insert authorization records into internal table'
+);
+
+-- Test 45: Student cannot select from internal authorization table
+SELECT extensions.throws_ok(
+  $$SELECT count(*) FROM public.group_archive_authorizations$$,
+  '42501',
+  NULL,
+  'Student cannot read from internal authorization table'
+);
+RESET ROLE;
+
+-- Test 46: Adversarial Test D — Super Admin cannot insert into internal authorization table directly
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT extensions.throws_ok(
+  $$INSERT INTO public.group_archive_authorizations (group_id, operation) VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'ARCHIVE')$$,
+  '42501',
+  NULL,
+  'Super Admin cannot directly insert authorization records into internal table'
+);
+
+-- Test 47: Super Admin direct restore update outside restore_group RPC is rejected
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_at = NULL, archived_by = NULL, archive_reason = NULL WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Super Admin cannot directly clear archive metadata outside restore_group RPC'
+);
+RESET ROLE;
+
+-- Test 48: Adversarial Test E — Internal authorization table has zero lingering rows
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.group_archive_authorizations),
+  0,
+  'No authorization tickets linger in table after operations'
+);
+
+-- Test 49: Adversarial Test F — Cross-group authorization ticket cannot authorize another group
+-- Setup an authorization ticket for Group A as database owner, then attempt to update Group B as Super Admin
+INSERT INTO public.group_archive_authorizations (group_id, operation, txid)
+VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'ARCHIVE', pg_catalog.txid_current());
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_at = now(), archived_by = '00000000-0000-4000-8000-000000000000'::uuid, archive_reason = 'Cross-group attack' WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Cross-group authorization ticket reuse is rejected'
+);
+RESET ROLE;
+-- Clean up test ticket for Group A
+DELETE FROM public.group_archive_authorizations WHERE group_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+
+-- Test 50: Adversarial Test F2 — Authorization ticket replay in same transaction fails
+-- Setup an authorization ticket for Group B as database owner
+INSERT INTO public.group_archive_authorizations (group_id, operation, txid)
+VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'ARCHIVE', pg_catalog.txid_current());
+
+-- First update consumes the ticket
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
+UPDATE public.groups SET archived_at = now(), archived_by = '00000000-0000-4000-8000-000000000000'::uuid, archive_reason = 'First legitimate consume' WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+
+-- Replay: Second update in same transaction fails because ticket was consumed (deleted)
+SELECT extensions.throws_ok(
+  $$UPDATE public.groups SET archived_at = now(), archived_by = '00000000-0000-4000-8000-000000000000'::uuid, archive_reason = 'Replay attack' WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
+  '42501',
+  'Unauthorized: Direct modification of group archive metadata is prohibited. Use archive_group or restore_group RPCs.',
+  'Authorization replay in same transaction is rejected'
+);
+RESET ROLE;
+
+-- Test 51: Adversarial Test G — Failed operations and rollbacks leave no lingering authorizations
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.group_archive_authorizations),
+  0,
+  'Authorization table remains completely clean after tests'
+);
 
 ROLLBACK;
