@@ -1,12 +1,12 @@
 -- ==============================================================================
 -- Integration tests for Group Soft Archiving & Unforgeable Authorization Hardening
--- Migrations: 20261104000001, 20261104000002, 20261104000003 & 20261104000004
+-- Migrations: 20261104000001, 20261104000002, 20261104000003, 20261104000004 & 20261104000005
 -- Executed against disposable Supabase database in CI / local test harness.
 -- ==============================================================================
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(69);
+SELECT extensions.plan(70);
 
 -- ------------------------------------------------------------------------------
 -- 1. SETUP DETERMINISTIC IDENTITIES
@@ -18,7 +18,9 @@ INSERT INTO auth.users (
   ('00000000-0000-4000-8000-000000000000', 'authenticated', 'authenticated', 'superadmin@test.invalid', '', now(), '{"role":"super_admin"}'::jsonb, '{}'::jsonb, now(), now()),
   ('11111111-1111-4111-8111-111111111111', 'authenticated', 'authenticated', 'teacher@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('22222222-2222-4222-8222-222222222222', 'authenticated', 'authenticated', 'student1@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
-  ('33333333-3333-4333-8333-333333333333', 'authenticated', 'authenticated', 'student2@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now())
+  ('33333333-3333-4333-8333-333333333333', 'authenticated', 'authenticated', 'student2@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('44444444-4444-4444-8444-444444444444', 'authenticated', 'authenticated', 'provstudent1@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('55555555-5555-4555-8555-555555555555', 'authenticated', 'authenticated', 'provstudent2@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.profiles (id, role, full_name, full_name_arabic, status)
@@ -79,12 +81,12 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 3: Anon cannot archive group
+-- Test 3: Anon cannot archive group (rejected at privilege layer)
 SET LOCAL ROLE anon;
 SELECT extensions.throws_ok(
   $$SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Anon attempt')$$,
   '42501',
-  'Unauthorized: Not authenticated',
+  NULL,
   'Anon caller is rejected'
 );
 RESET ROLE;
@@ -377,14 +379,14 @@ SELECT extensions.throws_ok(
   'Restoring non-archived group throws controlled error'
 );
 
--- Restore Group B properly via restore_group
+-- Test 35: Restore group B properly via restore_group
 SELECT extensions.lives_ok(
   $$SELECT public.restore_group('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2')$$,
   'Restore group B succeeds via RPC'
 );
 RESET ROLE;
 
--- Test 35: Restored group explicitly has is_active = TRUE
+-- Test 36: Restored group explicitly has is_active = TRUE
 SELECT extensions.is(
   (SELECT is_active FROM public.groups WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'),
   true,
@@ -401,7 +403,7 @@ SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000
 SELECT public.archive_group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Re-archive for provisioning test');
 RESET ROLE;
 
--- Test 36: provision_student_tx rejects target group that is archived
+-- Test 37: provision_student_tx rejects target group that is archived
 SET LOCAL ROLE service_role;
 SELECT extensions.throws_ok(
   $$SELECT public.provision_student_tx(
@@ -421,7 +423,7 @@ SELECT extensions.throws_ok(
   'provision_student_tx rejects archived target group'
 );
 
--- Test 37: provision_student_tx succeeds into active non-archived group (Group B)
+-- Test 38: provision_student_tx succeeds into active non-archived group (Group B)
 SELECT extensions.lives_ok(
   $$SELECT public.provision_student_tx(
     '55555555-5555-4555-8555-555555555555'::uuid,
@@ -438,7 +440,7 @@ SELECT extensions.lives_ok(
   'provision_student_tx succeeds into active group'
 );
 
--- Test 38: Verify student membership created by provision_student_tx
+-- Test 39: Verify student membership created by provision_student_tx
 SELECT extensions.is(
   (SELECT count(*)::integer FROM public.group_students WHERE group_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2' AND student_id = '55555555-5555-4555-8555-555555555555'),
   1,
@@ -446,7 +448,7 @@ SELECT extensions.is(
 );
 RESET ROLE;
 
--- Test 39: Non-service_role (teacher) cannot execute provision_student_tx directly
+-- Test 40: Non-service_role (teacher) cannot execute provision_student_tx directly
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 SELECT extensions.throws_ok(
@@ -467,7 +469,7 @@ SELECT extensions.throws_ok(
   'Teacher cannot directly execute provision_student_tx'
 );
 
--- Test 40: Non-service_role (student) cannot execute provision_student_tx directly
+-- Test 41: Non-service_role (student) cannot execute provision_student_tx directly
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 SELECT extensions.throws_ok(
   $$SELECT public.provision_student_tx(
@@ -492,7 +494,7 @@ RESET ROLE;
 -- 5. SEC-03 LEAST PRIVILEGE & UNFORGEABLE LEDGER TESTS
 -- ------------------------------------------------------------------------------
 
--- Test 41: Adversarial Test A — Custom GUC forgery by Super Admin is strictly rejected
+-- Test 42: Adversarial Test A — Custom GUC forgery by Super Admin is strictly rejected
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
 SELECT set_config('wessam.internal_archive_op', 'true', true);
@@ -504,7 +506,7 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 42: Teacher cannot insert into internal authorization table
+-- Test 43: Teacher cannot insert into internal authorization table
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 SELECT extensions.throws_ok(
@@ -514,7 +516,7 @@ SELECT extensions.throws_ok(
   'Teacher cannot insert authorization records into internal table'
 );
 
--- Test 43: Teacher cannot select from internal authorization table
+-- Test 44: Teacher cannot select from internal authorization table
 SELECT extensions.throws_ok(
   $$SELECT count(*) FROM public.group_archive_authorizations$$,
   '42501',
@@ -522,7 +524,7 @@ SELECT extensions.throws_ok(
   'Teacher cannot read from internal authorization table'
 );
 
--- Test 44: Teacher cannot update internal authorization table
+-- Test 45: Teacher cannot update internal authorization table
 SELECT extensions.throws_ok(
   $$UPDATE public.group_archive_authorizations SET operation = 'RESTORE'$$,
   '42501',
@@ -530,7 +532,7 @@ SELECT extensions.throws_ok(
   'Teacher cannot update internal authorization table'
 );
 
--- Test 45: Teacher cannot delete from internal authorization table
+-- Test 46: Teacher cannot delete from internal authorization table
 SELECT extensions.throws_ok(
   $$DELETE FROM public.group_archive_authorizations$$,
   '42501',
@@ -539,7 +541,7 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 46: Student cannot insert into internal authorization table
+-- Test 47: Student cannot insert into internal authorization table
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 SELECT extensions.throws_ok(
@@ -549,7 +551,7 @@ SELECT extensions.throws_ok(
   'Student cannot insert authorization records into internal table'
 );
 
--- Test 47: Student cannot select from internal authorization table
+-- Test 48: Student cannot select from internal authorization table
 SELECT extensions.throws_ok(
   $$SELECT count(*) FROM public.group_archive_authorizations$$,
   '42501',
@@ -557,7 +559,7 @@ SELECT extensions.throws_ok(
   'Student cannot read from internal authorization table'
 );
 
--- Test 48: Student cannot update internal authorization table
+-- Test 49: Student cannot update internal authorization table
 SELECT extensions.throws_ok(
   $$UPDATE public.group_archive_authorizations SET operation = 'RESTORE'$$,
   '42501',
@@ -565,7 +567,7 @@ SELECT extensions.throws_ok(
   'Student cannot update internal authorization table'
 );
 
--- Test 49: Student cannot delete from internal authorization table
+-- Test 50: Student cannot delete from internal authorization table
 SELECT extensions.throws_ok(
   $$DELETE FROM public.group_archive_authorizations$$,
   '42501',
@@ -574,7 +576,7 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 50: Super Admin cannot insert into internal authorization table directly
+-- Test 51: Super Admin cannot insert into internal authorization table directly
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
 SELECT extensions.throws_ok(
@@ -584,7 +586,7 @@ SELECT extensions.throws_ok(
   'Super Admin cannot directly insert authorization records into internal table'
 );
 
--- Test 51: Super Admin cannot select from internal authorization table
+-- Test 52: Super Admin cannot select from internal authorization table
 SELECT extensions.throws_ok(
   $$SELECT count(*) FROM public.group_archive_authorizations$$,
   '42501',
@@ -592,7 +594,7 @@ SELECT extensions.throws_ok(
   'Super Admin cannot directly read from internal authorization table'
 );
 
--- Test 52: Super Admin cannot update internal authorization table
+-- Test 53: Super Admin cannot update internal authorization table
 SELECT extensions.throws_ok(
   $$UPDATE public.group_archive_authorizations SET operation = 'RESTORE'$$,
   '42501',
@@ -600,7 +602,7 @@ SELECT extensions.throws_ok(
   'Super Admin cannot directly update internal authorization table'
 );
 
--- Test 53: Super Admin cannot delete from internal authorization table
+-- Test 54: Super Admin cannot delete from internal authorization table
 SELECT extensions.throws_ok(
   $$DELETE FROM public.group_archive_authorizations$$,
   '42501',
@@ -609,7 +611,7 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 54: Fix A — service_role cannot insert into internal authorization table directly
+-- Test 55: Fix A — service_role cannot insert into internal authorization table directly
 SET LOCAL ROLE service_role;
 SELECT extensions.throws_ok(
   $$INSERT INTO public.group_archive_authorizations (group_id, operation) VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'ARCHIVE')$$,
@@ -618,7 +620,7 @@ SELECT extensions.throws_ok(
   'service_role cannot insert authorization records directly into table'
 );
 
--- Test 55: Fix A — service_role cannot select from internal authorization table
+-- Test 56: Fix A — service_role cannot select from internal authorization table
 SELECT extensions.throws_ok(
   $$SELECT count(*) FROM public.group_archive_authorizations$$,
   '42501',
@@ -626,7 +628,7 @@ SELECT extensions.throws_ok(
   'service_role cannot select from internal authorization table'
 );
 
--- Test 56: Fix A — service_role cannot update internal authorization table
+-- Test 57: Fix A — service_role cannot update internal authorization table
 SELECT extensions.throws_ok(
   $$UPDATE public.group_archive_authorizations SET operation = 'RESTORE'$$,
   '42501',
@@ -634,7 +636,7 @@ SELECT extensions.throws_ok(
   'service_role cannot update internal authorization table'
 );
 
--- Test 57: Fix A — service_role cannot delete from internal authorization table
+-- Test 58: Fix A — service_role cannot delete from internal authorization table
 SELECT extensions.throws_ok(
   $$DELETE FROM public.group_archive_authorizations$$,
   '42501',
@@ -643,7 +645,7 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 58: Super Admin direct restore update outside restore_group RPC is rejected
+-- Test 59: Super Admin direct restore update outside restore_group RPC is rejected
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
 SELECT extensions.throws_ok(
@@ -653,7 +655,7 @@ SELECT extensions.throws_ok(
   'Super Admin cannot directly clear archive metadata outside restore_group RPC'
 );
 
--- Test 59: Super Admin direct update of archived_at without RPC is rejected
+-- Test 60: Super Admin direct update of archived_at without RPC is rejected
 SELECT extensions.throws_ok(
   $$UPDATE public.groups SET archived_at = now() WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
   '42501',
@@ -661,7 +663,7 @@ SELECT extensions.throws_ok(
   'Super Admin cannot directly update archived_at outside RPC'
 );
 
--- Test 60: Super Admin direct update of archived_by without RPC is rejected
+-- Test 61: Super Admin direct update of archived_by without RPC is rejected
 SELECT extensions.throws_ok(
   $$UPDATE public.groups SET archived_by = '00000000-0000-4000-8000-000000000000'::uuid WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'$$,
   '42501',
@@ -670,14 +672,14 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 61: Internal authorization table has zero lingering rows after legitimate operations
+-- Test 62: Internal authorization table has zero lingering rows after legitimate operations
 SELECT extensions.is(
   (SELECT count(*)::integer FROM public.group_archive_authorizations),
   0,
   'No authorization tickets linger in table after operations'
 );
 
--- Test 62: Cross-group authorization ticket cannot authorize another group
+-- Test 63: Cross-group authorization ticket cannot authorize another group
 -- Setup an authorization ticket for Group A as database owner, then attempt to update Group B as Super Admin
 INSERT INTO public.group_archive_authorizations (group_id, operation, txid)
 VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'ARCHIVE', pg_catalog.txid_current());
@@ -693,7 +695,7 @@ SELECT extensions.throws_ok(
 RESET ROLE;
 DELETE FROM public.group_archive_authorizations WHERE group_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 
--- Test 63: Cross-operation: ARCHIVE ticket cannot authorize RESTORE operation
+-- Test 64: Cross-operation: ARCHIVE ticket cannot authorize RESTORE operation
 INSERT INTO public.group_archive_authorizations (group_id, operation, txid)
 VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'ARCHIVE', pg_catalog.txid_current());
 
@@ -708,7 +710,7 @@ SELECT extensions.throws_ok(
 RESET ROLE;
 DELETE FROM public.group_archive_authorizations WHERE group_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 
--- Test 64: Cross-operation: RESTORE ticket cannot authorize ARCHIVE operation
+-- Test 65: Cross-operation: RESTORE ticket cannot authorize ARCHIVE operation
 INSERT INTO public.group_archive_authorizations (group_id, operation, txid)
 VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'RESTORE', pg_catalog.txid_current());
 
@@ -723,7 +725,7 @@ SELECT extensions.throws_ok(
 RESET ROLE;
 DELETE FROM public.group_archive_authorizations WHERE group_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
 
--- Test 65: Transaction-scoped isolation: ticket with different txid cannot authorize current transaction
+-- Test 66: Transaction-scoped isolation: ticket with different txid cannot authorize current transaction
 INSERT INTO public.group_archive_authorizations (group_id, operation, txid)
 VALUES ('dddddddd-dddd-4ddd-8ddd-ddddddddddd4', 'ARCHIVE', pg_catalog.txid_current() - 1);
 
@@ -746,7 +748,7 @@ DELETE FROM public.group_archive_authorizations WHERE group_id = 'dddddddd-dddd-
 INSERT INTO public.group_archive_authorizations (group_id, operation, txid)
 VALUES ('dddddddd-dddd-4ddd-8ddd-ddddddddddd4', 'ARCHIVE', pg_catalog.txid_current());
 
--- Test 66: First ARCHIVE transition succeeds and consumes the ticket
+-- Test 67: First ARCHIVE transition succeeds and consumes the ticket
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
 SELECT extensions.lives_ok(
@@ -759,7 +761,7 @@ SELECT extensions.lives_ok(
 );
 RESET ROLE;
 
--- Test 67: Confirm that the ticket was deleted upon consumption
+-- Test 68: Confirm that the ticket was deleted upon consumption
 SELECT extensions.is(
   (SELECT count(*)::integer FROM public.group_archive_authorizations WHERE group_id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'),
   0,
@@ -773,7 +775,7 @@ SET archived_at = NULL, archived_by = NULL, archive_reason = NULL
 WHERE id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
 ALTER TABLE public.groups ENABLE TRIGGER trg_protect_group_archive_metadata;
 
--- Test 68: Second ARCHIVE attempt on the reset group (valid unarchived -> archived transition)
+-- Test 69: Second ARCHIVE attempt on the reset group (valid unarchived -> archived transition)
 -- must be rejected with 42501 specifically because the ticket was already consumed!
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
@@ -789,7 +791,7 @@ SELECT extensions.throws_ok(
 );
 RESET ROLE;
 
--- Test 69: Confirm authorization table remains completely clean
+-- Test 70: Confirm authorization table remains completely clean
 SELECT extensions.is(
   (SELECT count(*)::integer FROM public.group_archive_authorizations),
   0,
