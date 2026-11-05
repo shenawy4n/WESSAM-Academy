@@ -31,6 +31,7 @@ export interface LessonResourceRecord {
   title: string;
   titleArabic?: string | null;
   fileUrl: string;
+  storagePath?: string | null;
   fileType?: string | null;
   fileSizeBytes?: number | null;
   createdAt: string;
@@ -83,12 +84,64 @@ export interface StudentCourseSummary {
 }
 
 // -----------------------------------------------------------------------------
+// Storage Configuration & Validation Constants
+// -----------------------------------------------------------------------------
+export const STORAGE_BUCKET = 'learning-resources';
+export const MAX_RESOURCE_SIZE_BYTES = 26214400; // 25 MB
+
+export const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'application/zip',
+  'image/jpeg',
+  'image/png',
+]);
+
+export const ALLOWED_EXTENSIONS = new Set([
+  'pdf',
+  'docx',
+  'doc',
+  'pptx',
+  'ppt',
+  'zip',
+  'jpg',
+  'jpeg',
+  'png',
+]);
+
+export function validateLearningResourceFile(file: File): { isValid: boolean; error?: string } {
+  if (!file) {
+    return { isValid: false, error: 'No file provided' };
+  }
+
+  if (file.size > MAX_RESOURCE_SIZE_BYTES) {
+    return { isValid: false, error: `File size exceeds 25 MB limit (${(file.size / 1024 / 1024).toFixed(1)} MB)` };
+  }
+
+  const nameParts = file.name.split('.');
+  const ext = (nameParts[nameParts.length - 1] || '').toLowerCase();
+
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return { isValid: false, error: `Disallowed file extension .${ext}. Permitted formats: PDF, DOCX, PPTX, ZIP, JPG, PNG` };
+  }
+
+  if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+    return { isValid: false, error: `Disallowed MIME type ${file.type}` };
+  }
+
+  return { isValid: true };
+}
+
+// -----------------------------------------------------------------------------
 // Preview Demo Data for Offline / Inspection Mode
 // -----------------------------------------------------------------------------
 const DEMO_COURSES: CourseRecord[] = [
   {
-    id: 'demo-course-1',
-    teacherId: 'demo-teacher',
+    id: 'cccccccc-1111-4111-8111-111111111111',
+    teacherId: '11111111-1111-4111-8111-111111111111',
     title: 'IELTS Academic Writing & Speaking Mastery',
     titleArabic: 'إتقان الكتابة والمحادثة الأكاديمية لاختبار الآيلتس',
     description: 'Comprehensive preparation designed for Saudi students targeting Band 7.0+ in IELTS Academic writing task 1 & 2, alongside fluent speaking techniques.',
@@ -106,8 +159,8 @@ const DEMO_COURSES: CourseRecord[] = [
     ],
   },
   {
-    id: 'demo-course-2',
-    teacherId: 'demo-teacher',
+    id: 'cccccccc-2222-4222-8222-222222222222',
+    teacherId: '11111111-1111-4111-8111-111111111111',
     title: 'English Grammar Foundations & Sentence Structure',
     titleArabic: 'أساسيات قواعد اللغة الإنجليزية وبناء الجملة السليمة',
     description: 'Master core tenses, active vs passive voice, conditionals, and sentence mechanics with practical Saudi academic context.',
@@ -117,8 +170,8 @@ const DEMO_COURSES: CourseRecord[] = [
     isPublished: true,
     createdAt: '2026-09-05T09:00:00Z',
     updatedAt: '2026-09-20T14:00:00Z',
-    unitsCount: 2,
-    lessonsCount: 3,
+    unitsCount: 1,
+    lessonsCount: 1,
     assignedGroupsCount: 2,
     assignedGroups: [
       { id: 'demo-group-1', name: 'Group A - Intensive IELTS Prep', nameArabic: 'المجموعة أ - الإعداد المكثف للآيلتس', studentCount: 2 },
@@ -126,8 +179,8 @@ const DEMO_COURSES: CourseRecord[] = [
     ],
   },
   {
-    id: 'demo-course-3',
-    teacherId: 'demo-teacher',
+    id: 'cccccccc-3333-4333-8333-333333333333',
+    teacherId: '11111111-1111-4111-8111-111111111111',
     title: 'Secondary English Enrichment (Draft)',
     titleArabic: 'إثراء اللغة الإنجليزية للمرحلة الثانوية (مسودة)',
     description: 'Upcoming supplementary curriculum aligning with Saudi high school standards and vocabulary expansion.',
@@ -145,19 +198,19 @@ const DEMO_COURSES: CourseRecord[] = [
 ];
 
 const DEMO_CURRICULUM: Record<string, CourseUnitRecord[]> = {
-  'demo-course-1': [
+  'cccccccc-1111-4111-8111-111111111111': [
     {
-      id: 'demo-unit-101',
-      courseId: 'demo-course-1',
+      id: '44444444-1111-4111-8111-111111111111',
+      courseId: 'cccccccc-1111-4111-8111-111111111111',
       title: 'Unit 1: Academic Writing Task 2 — Argumentative Essays',
       titleArabic: 'الوحدة 1: مهمة الكتابة الأكاديمية 2 — المقالات الجدلية',
       orderIndex: 1,
       createdAt: '2026-09-01T08:30:00Z',
       lessons: [
         {
-          id: 'demo-lesson-101',
-          courseId: 'demo-course-1',
-          unitId: 'demo-unit-101',
+          id: '55555555-1111-4111-8111-111111111111',
+          courseId: 'cccccccc-1111-4111-8111-111111111111',
+          unitId: '44444444-1111-4111-8111-111111111111',
           title: 'Lesson 1.1: Analyzing the Prompt & Generating Band 7 Ideas',
           titleArabic: 'الدرس 1.1: تحليل نص السؤال وتوليد الأفكار لدرجة 7+',
           description: 'Learn Mr. Wessam\'s 4-step framework to deconstruct any IELTS prompt, identify key question words, and plan balanced body paragraphs.',
@@ -169,11 +222,12 @@ const DEMO_CURRICULUM: Record<string, CourseUnitRecord[]> = {
           updatedAt: '2026-09-01T09:00:00Z',
           resources: [
             {
-              id: 'res-101',
-              lessonId: 'demo-lesson-101',
+              id: '66666666-1111-4111-8111-111111111111',
+              lessonId: '55555555-1111-4111-8111-111111111111',
               title: 'IELTS Task 2 Planning Template (PDF)',
               titleArabic: 'نموذج التخطيط لمقالة الآيلتس (PDF)',
-              fileUrl: 'https://example.com/resources/task2-template.pdf',
+              fileUrl: 'courses/cccccccc-1111-4111-8111-111111111111/lessons/55555555-1111-4111-8111-111111111111/task2-template.pdf',
+              storagePath: 'courses/cccccccc-1111-4111-8111-111111111111/lessons/55555555-1111-4111-8111-111111111111/task2-template.pdf',
               fileType: 'pdf',
               fileSizeBytes: 1250000,
               createdAt: '2026-09-01T10:00:00Z',
@@ -182,9 +236,9 @@ const DEMO_CURRICULUM: Record<string, CourseUnitRecord[]> = {
           progress: { isCompleted: true, watchSeconds: 2700, lastAccessedAt: '2026-10-01T14:00:00Z' },
         },
         {
-          id: 'demo-lesson-102',
-          courseId: 'demo-course-1',
-          unitId: 'demo-unit-101',
+          id: '55555555-2222-4222-8222-222222222222',
+          courseId: 'cccccccc-1111-4111-8111-111111111111',
+          unitId: '44444444-1111-4111-8111-111111111111',
           title: 'Lesson 1.2: Mastering Academic Cohesive Devices',
           titleArabic: 'الدرس 1.2: إتقان أدوات الربط والتماسك الأكاديمي',
           description: 'Avoid repetitive linking words like "moreover" and discover contextual transition techniques for maximum cohesion marks.',
@@ -196,11 +250,12 @@ const DEMO_CURRICULUM: Record<string, CourseUnitRecord[]> = {
           updatedAt: '2026-09-03T09:00:00Z',
           resources: [
             {
-              id: 'res-102',
-              lessonId: 'demo-lesson-102',
+              id: '66666666-2222-4222-8222-222222222222',
+              lessonId: '55555555-2222-4222-8222-222222222222',
               title: 'Academic Linking Words Cheat Sheet',
               titleArabic: 'جدول أدوات الربط الأكاديمية الاحترافية',
-              fileUrl: 'https://example.com/resources/cohesive-devices.pdf',
+              fileUrl: 'courses/cccccccc-1111-4111-8111-111111111111/lessons/55555555-2222-4222-8222-222222222222/cohesive-devices.pdf',
+              storagePath: 'courses/cccccccc-1111-4111-8111-111111111111/lessons/55555555-2222-4222-8222-222222222222/cohesive-devices.pdf',
               fileType: 'pdf',
               fileSizeBytes: 890000,
               createdAt: '2026-09-03T10:00:00Z',
@@ -211,17 +266,17 @@ const DEMO_CURRICULUM: Record<string, CourseUnitRecord[]> = {
       ],
     },
     {
-      id: 'demo-unit-102',
-      courseId: 'demo-course-1',
+      id: '44444444-2222-4222-8222-222222222222',
+      courseId: 'cccccccc-1111-4111-8111-111111111111',
       title: 'Unit 2: IELTS Speaking Fluency & Topic Vocabulary',
       titleArabic: 'الوحدة 2: طلاقة التحدث في الآيلتس ومفردات المواضيع الشائعة',
       orderIndex: 2,
       createdAt: '2026-09-05T08:30:00Z',
       lessons: [
         {
-          id: 'demo-lesson-103',
-          courseId: 'demo-course-1',
-          unitId: 'demo-unit-102',
+          id: '55555555-3333-4333-8333-333333333333',
+          courseId: 'cccccccc-1111-4111-8111-111111111111',
+          unitId: '44444444-2222-4222-8222-222222222222',
           title: 'Lesson 2.1: Part 2 Long Turn — 2-Minute Speech Technique',
           titleArabic: 'الدرس 2.1: الجزء الثاني — تكنيك التحدث المتواصل لدقيقتين',
           description: 'Structure your notes during the 1-minute prep time and speak fluently without awkward pauses.',
@@ -233,50 +288,6 @@ const DEMO_CURRICULUM: Record<string, CourseUnitRecord[]> = {
           updatedAt: '2026-09-05T09:00:00Z',
           resources: [],
           progress: { isCompleted: false, watchSeconds: 0 },
-        },
-        {
-          id: 'demo-lesson-104',
-          courseId: 'demo-course-1',
-          unitId: 'demo-unit-102',
-          title: 'Lesson 2.2: Advanced Idiomatic Expressions for Speaking',
-          titleArabic: 'الدرس 2.2: التعبيرات الاصطلاحية المتقدمة للمحادثة',
-          description: 'Natural English collocations that impress IELTS examiners when used accurately.',
-          durationMinutes: 35,
-          orderIndex: 2,
-          videoUrl: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
-          isPublished: true,
-          createdAt: '2026-09-08T09:00:00Z',
-          updatedAt: '2026-09-08T09:00:00Z',
-          resources: [],
-          progress: null,
-        },
-      ],
-    },
-  ],
-  'demo-course-2': [
-    {
-      id: 'demo-unit-201',
-      courseId: 'demo-course-2',
-      title: 'Unit 1: Perfect & Continuous Tenses in Depth',
-      titleArabic: 'الوحدة 1: الأزمنة التامة والمستمرة بعمق',
-      orderIndex: 1,
-      createdAt: '2026-09-05T09:00:00Z',
-      lessons: [
-        {
-          id: 'demo-lesson-201',
-          courseId: 'demo-course-2',
-          unitId: 'demo-unit-201',
-          title: 'Lesson 1.1: Present Perfect Simple vs Present Perfect Continuous',
-          titleArabic: 'الدرس 1.1: المضارع التام البسيط مقابل المضارع التام المستمر',
-          description: 'Distinguish between finished results and ongoing duration with authentic examples.',
-          durationMinutes: 45,
-          orderIndex: 1,
-          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-          isPublished: true,
-          createdAt: '2026-09-05T10:00:00Z',
-          updatedAt: '2026-09-05T10:00:00Z',
-          resources: [],
-          progress: { isCompleted: true, watchSeconds: 2700 },
         },
       ],
     },
@@ -333,7 +344,6 @@ export async function fetchTeacherCourses(filter?: {
   if (error) throw new Error(`Failed to fetch courses: ${error.message}`);
   if (!courses || courses.length === 0) return [];
 
-  // Fetch unit and lesson counts for each course
   const courseIds = courses.map((c) => c.id);
 
   const [unitsRes, lessonsRes, groupsRes] = await Promise.all([
@@ -406,8 +416,8 @@ export async function createCourse(params: {
 }): Promise<CourseRecord> {
   if (!supabase) {
     const newCourse: CourseRecord = {
-      id: `demo-course-${Date.now()}`,
-      teacherId: 'demo-teacher',
+      id: `cccccccc-${Date.now().toString(16).padStart(4, '0')}-4000-8000-000000000000`,
+      teacherId: '11111111-1111-4111-8111-111111111111',
       title: params.title.trim(),
       titleArabic: params.titleArabic.trim(),
       description: params.description?.trim() || null,
@@ -431,6 +441,7 @@ export async function createCourse(params: {
   const callerId = userRes?.user?.id;
   if (!callerId) throw new Error('Not authenticated');
 
+  // Enforces authenticated caller's own profile ID as teacher_id
   const { data, error } = await supabase
     .from('courses')
     .insert({
@@ -553,7 +564,6 @@ export async function fetchCourseCurriculum(courseId: string): Promise<{
     return { course, units };
   }
 
-  // 1. Fetch course details
   const { data: c, error: cErr } = await supabase
     .from('courses')
     .select('*')
@@ -562,7 +572,6 @@ export async function fetchCourseCurriculum(courseId: string): Promise<{
 
   if (cErr || !c) throw new Error(`Course not found: ${cErr?.message}`);
 
-  // 2. Fetch units ordered by order_index
   const { data: units, error: uErr } = await supabase
     .from('course_units')
     .select('*')
@@ -571,7 +580,6 @@ export async function fetchCourseCurriculum(courseId: string): Promise<{
 
   if (uErr) throw new Error(`Failed to fetch units: ${uErr.message}`);
 
-  // 3. Fetch lessons for this course ordered by order_index
   const { data: lessons, error: lErr } = await supabase
     .from('lessons')
     .select(`
@@ -593,9 +601,8 @@ export async function fetchCourseCurriculum(courseId: string): Promise<{
 
   if (lErr) throw new Error(`Failed to fetch lessons: ${lErr.message}`);
 
-  // 4. Fetch resources for these lessons
   const lessonIds = (lessons || []).map((l) => l.id);
-  let resourcesMap = new Map<string, LessonResourceRecord[]>();
+  const resourcesMap = new Map<string, LessonResourceRecord[]>();
   if (lessonIds.length > 0) {
     const { data: resources } = await supabase
       .from('lesson_resources')
@@ -612,6 +619,7 @@ export async function fetchCourseCurriculum(courseId: string): Promise<{
           title: r.title,
           titleArabic: r.title_arabic,
           fileUrl: r.file_url,
+          storagePath: r.storage_path,
           fileType: r.file_type,
           fileSizeBytes: r.file_size_bytes,
           createdAt: r.created_at,
@@ -621,7 +629,6 @@ export async function fetchCourseCurriculum(courseId: string): Promise<{
     }
   }
 
-  // 5. Structure lessons into units
   const lessonsByUnit = new Map<string, LessonRecord[]>();
   for (const l of lessons || []) {
     const list = lessonsByUnit.get(l.unit_id) || [];
@@ -680,7 +687,7 @@ export async function createUnit(params: {
   if (!supabase) {
     const units = DEMO_CURRICULUM[params.courseId] || [];
     const newUnit: CourseUnitRecord = {
-      id: `demo-unit-${Date.now()}`,
+      id: `44444444-${Date.now().toString(16).padStart(4, '0')}-4000-8000-000000000000`,
       courseId: params.courseId,
       title: params.title.trim(),
       titleArabic: params.titleArabic.trim(),
@@ -693,7 +700,6 @@ export async function createUnit(params: {
     return newUnit;
   }
 
-  // Determine current max order_index
   const { data: existing } = await supabase
     .from('course_units')
     .select('order_index')
@@ -788,7 +794,7 @@ export async function reorderUnits(courseId: string, unitIds: string[]): Promise
     p_unit_ids: unitIds,
   });
 
-  if (error) throw new Error(`Failed to reorder units: ${error.message}`);
+  if (error) throw new Error(error.message || 'Failed to reorder units');
 }
 
 export async function createLesson(params: {
@@ -805,7 +811,7 @@ export async function createLesson(params: {
     const list = DEMO_CURRICULUM[params.courseId] || [];
     const unit = list.find((u) => u.id === params.unitId);
     const newLesson: LessonRecord = {
-      id: `demo-lesson-${Date.now()}`,
+      id: `55555555-${Date.now().toString(16).padStart(4, '0')}-4000-8000-000000000000`,
       courseId: params.courseId,
       unitId: params.unitId,
       title: params.title.trim(),
@@ -950,12 +956,100 @@ export async function reorderLessons(unitId: string, lessonIds: string[]): Promi
     p_lesson_ids: lessonIds,
   });
 
-  if (error) throw new Error(`Failed to reorder lessons: ${error.message}`);
+  if (error) throw new Error(error.message || 'Failed to reorder lessons');
 }
 
 // -----------------------------------------------------------------------------
-// LESSON RESOURCES API
+// PRIVATE LEARNING RESOURCE STORAGE & MANAGEMENT
 // -----------------------------------------------------------------------------
+
+export async function uploadLessonResource(params: {
+  courseId: string;
+  lessonId: string;
+  file: File;
+  title: string;
+  titleArabic?: string;
+}): Promise<LessonResourceRecord> {
+  // Validate file parameters
+  const validation = validateLearningResourceFile(params.file);
+  if (!validation.isValid) {
+    throw new Error(validation.error || 'Invalid resource file');
+  }
+
+  const safeFileName = params.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `courses/${params.courseId}/lessons/${params.lessonId}/${Date.now()}-${safeFileName}`;
+  const ext = safeFileName.split('.').pop()?.toLowerCase() || 'pdf';
+
+  if (!supabase) {
+    const res: LessonResourceRecord = {
+      id: `66666666-${Date.now().toString(16).padStart(4, '0')}-4000-8000-000000000000`,
+      lessonId: params.lessonId,
+      title: params.title.trim(),
+      titleArabic: params.titleArabic?.trim() || null,
+      fileUrl: storagePath,
+      storagePath,
+      fileType: ext,
+      fileSizeBytes: params.file.size,
+      createdAt: new Date().toISOString(),
+    };
+    for (const list of Object.values(DEMO_CURRICULUM)) {
+      for (const u of list) {
+        const l = u.lessons.find((item) => item.id === params.lessonId);
+        if (l) {
+          l.resources = l.resources || [];
+          l.resources.push(res);
+          return res;
+        }
+      }
+    }
+    return res;
+  }
+
+  // 1. Upload to private Supabase Storage bucket
+  const { error: uploadErr } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(storagePath, params.file, {
+      contentType: params.file.type || 'application/octet-stream',
+      upsert: false,
+    });
+
+  if (uploadErr) {
+    throw new Error(`Failed to upload resource to storage: ${uploadErr.message}`);
+  }
+
+  // 2. Insert metadata into public.lesson_resources
+  const { data, error: dbErr } = await supabase
+    .from('lesson_resources')
+    .insert({
+      lesson_id: params.lessonId,
+      title: params.title.trim(),
+      title_arabic: params.titleArabic?.trim() || null,
+      file_url: storagePath,
+      storage_path: storagePath,
+      file_type: ext,
+      file_size_bytes: params.file.size,
+    })
+    .select('*')
+    .single();
+
+  if (dbErr) {
+    // Attempt rollback of storage object if DB insert fails
+    await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
+    throw new Error(`Failed to save resource record: ${dbErr.message}`);
+  }
+
+  return {
+    id: data.id,
+    lessonId: data.lesson_id,
+    title: data.title,
+    titleArabic: data.title_arabic,
+    fileUrl: data.file_url,
+    storagePath: data.storage_path,
+    fileType: data.file_type,
+    fileSizeBytes: data.file_size_bytes,
+    createdAt: data.created_at,
+  };
+}
 
 export async function addLessonResource(params: {
   lessonId: string;
@@ -963,17 +1057,19 @@ export async function addLessonResource(params: {
   titleArabic?: string;
   fileUrl: string;
   fileType?: string;
-  fileSizeBytes?: number;
 }): Promise<LessonResourceRecord> {
+  const ext = params.fileType || params.fileUrl.split('.').pop()?.toLowerCase() || 'pdf';
+
   if (!supabase) {
     const res: LessonResourceRecord = {
-      id: `demo-res-${Date.now()}`,
+      id: `66666666-${Date.now().toString(16).padStart(4, '0')}-4000-8000-000000000000`,
       lessonId: params.lessonId,
       title: params.title.trim(),
       titleArabic: params.titleArabic?.trim() || null,
       fileUrl: params.fileUrl.trim(),
-      fileType: params.fileType || 'pdf',
-      fileSizeBytes: params.fileSizeBytes || 1024000,
+      storagePath: null,
+      fileType: ext,
+      fileSizeBytes: null,
       createdAt: new Date().toISOString(),
     };
     for (const list of Object.values(DEMO_CURRICULUM)) {
@@ -996,13 +1092,16 @@ export async function addLessonResource(params: {
       title: params.title.trim(),
       title_arabic: params.titleArabic?.trim() || null,
       file_url: params.fileUrl.trim(),
-      file_type: params.fileType || 'pdf',
-      file_size_bytes: params.fileSizeBytes || null,
+      storage_path: null,
+      file_type: ext,
+      file_size_bytes: null,
     })
     .select('*')
     .single();
 
-  if (error) throw new Error(`Failed to add resource: ${error.message}`);
+  if (error || !data) {
+    throw new Error(`Failed to add resource: ${error?.message}`);
+  }
 
   return {
     id: data.id,
@@ -1010,10 +1109,46 @@ export async function addLessonResource(params: {
     title: data.title,
     titleArabic: data.title_arabic,
     fileUrl: data.file_url,
+    storagePath: data.storage_path,
     fileType: data.file_type,
     fileSizeBytes: data.file_size_bytes,
     createdAt: data.created_at,
   };
+}
+
+export async function getLessonResourceDownloadUrl(resourceId: string): Promise<string> {
+  if (!supabase) {
+    return 'https://example.com/resources/sample-handout.pdf';
+  }
+
+  // Fetch resource row (enforces RLS: only permitted users can read)
+  const { data: res, error } = await supabase
+    .from('lesson_resources')
+    .select('id, file_url, storage_path')
+    .eq('id', resourceId)
+    .single();
+
+  if (error || !res) {
+    throw new Error('Resource not accessible or unauthorized');
+  }
+
+  const path = res.storage_path || res.file_url;
+
+  // If path looks like an external HTTPS link from earlier migration, return direct URL
+  if (path.startsWith('https://')) {
+    return path;
+  }
+
+  // Generate short-lived (5-minute) signed URL via Supabase Storage
+  const { data: signedData, error: signErr } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(path, 300);
+
+  if (signErr || !signedData?.signedUrl) {
+    throw new Error(`Failed to generate download URL: ${signErr?.message || 'Access denied'}`);
+  }
+
+  return signedData.signedUrl;
 }
 
 export async function deleteLessonResource(resourceId: string): Promise<void> {
@@ -1034,8 +1169,28 @@ export async function deleteLessonResource(resourceId: string): Promise<void> {
     return;
   }
 
-  const { error } = await supabase.from('lesson_resources').delete().eq('id', resourceId);
-  if (error) throw new Error(`Failed to delete resource: ${error.message}`);
+  // 1. Fetch resource metadata to retrieve storage path
+  const { data: res } = await supabase
+    .from('lesson_resources')
+    .select('id, storage_path, file_url')
+    .eq('id', resourceId)
+    .single();
+
+  // 2. Delete database record (enforces RLS: only course owner or super admin can delete)
+  const { error: dbErr } = await supabase
+    .from('lesson_resources')
+    .delete()
+    .eq('id', resourceId);
+
+  if (dbErr) {
+    throw new Error(`Failed to delete resource: ${dbErr.message}`);
+  }
+
+  // 3. Delete underlying storage object if present
+  const pathToDelete = res?.storage_path || (res?.file_url && !res.file_url.startsWith('https://') ? res.file_url : null);
+  if (pathToDelete) {
+    await supabase.storage.from(STORAGE_BUCKET).remove([pathToDelete]);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -1153,7 +1308,7 @@ export async function fetchStudentCourses(): Promise<StudentCourseSummary[]> {
   if (!supabase) {
     return [
       {
-        id: 'demo-course-1',
+        id: 'cccccccc-1111-4111-8111-111111111111',
         title: 'IELTS Academic Writing & Speaking Mastery',
         titleArabic: 'إتقان الكتابة والمحادثة الأكاديمية لاختبار الآيلتس',
         description: 'Comprehensive preparation designed for Saudi students targeting Band 7.0+ in IELTS Academic writing task 1 & 2.',
@@ -1167,7 +1322,7 @@ export async function fetchStudentCourses(): Promise<StudentCourseSummary[]> {
         groupNameArabic: 'المجموعة أ - الإعداد المكثف للآيلتس',
       },
       {
-        id: 'demo-course-2',
+        id: 'cccccccc-2222-4222-8222-222222222222',
         title: 'English Grammar Foundations & Sentence Structure',
         titleArabic: 'أساسيات قواعد اللغة الإنجليزية وبناء الجملة السليمة',
         description: 'Master core tenses, active vs passive voice, conditionals, and sentence mechanics with practical Saudi academic context.',
@@ -1183,7 +1338,7 @@ export async function fetchStudentCourses(): Promise<StudentCourseSummary[]> {
     ];
   }
 
-  // 1. Fetch courses visible to this student via RLS
+  // Fetch published courses accessible via student's active group enrollments
   const { data: courses, error } = await supabase
     .from('courses')
     .select(`
@@ -1203,7 +1358,7 @@ export async function fetchStudentCourses(): Promise<StudentCourseSummary[]> {
 
   const courseIds = courses.map((c) => c.id);
 
-  // 2. Fetch published lessons for these courses
+  // Fetch published lessons for these courses
   const { data: lessons } = await supabase
     .from('lessons')
     .select('id, course_id')
@@ -1217,7 +1372,7 @@ export async function fetchStudentCourses(): Promise<StudentCourseSummary[]> {
     lessonIds.push(l.id);
   }
 
-  // 3. Fetch completed progress for this student
+  // Fetch completed progress for this student
   const completedMap = new Map<string, number>();
   if (lessonIds.length > 0) {
     const { data: progress } = await supabase
@@ -1227,7 +1382,6 @@ export async function fetchStudentCourses(): Promise<StudentCourseSummary[]> {
       .eq('is_completed', true);
 
     if (progress) {
-      // Map lesson_id back to course_id
       const lessonToCourse = new Map<string, string>();
       for (const l of lessons || []) lessonToCourse.set(l.id, l.course_id);
 
@@ -1287,7 +1441,7 @@ export async function fetchStudentCourseDetails(courseId: string): Promise<{
     };
   }
 
-  // 1. Fetch course details
+  // 1. Fetch course details (enforces RLS)
   const { data: c, error: cErr } = await supabase
     .from('courses')
     .select('*')
@@ -1296,7 +1450,7 @@ export async function fetchStudentCourseDetails(courseId: string): Promise<{
 
   if (cErr || !c) throw new Error(`Course not accessible: ${cErr?.message}`);
 
-  // 2. Fetch units
+  // 2. Fetch units (enforces RLS)
   const { data: units, error: uErr } = await supabase
     .from('course_units')
     .select('*')
@@ -1305,7 +1459,7 @@ export async function fetchStudentCourseDetails(courseId: string): Promise<{
 
   if (uErr) throw new Error(`Failed to fetch units: ${uErr.message}`);
 
-  // 3. Fetch published lessons
+  // 3. Fetch published lessons (enforces RLS)
   const { data: lessons, error: lErr } = await supabase
     .from('lessons')
     .select(`
@@ -1349,6 +1503,7 @@ export async function fetchStudentCourseDetails(courseId: string): Promise<{
       title: r.title,
       titleArabic: r.title_arabic,
       fileUrl: r.file_url,
+      storagePath: r.storage_path,
       fileType: r.file_type,
       fileSizeBytes: r.file_size_bytes,
       createdAt: r.created_at,

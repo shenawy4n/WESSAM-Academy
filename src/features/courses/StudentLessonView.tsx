@@ -5,7 +5,12 @@
 
 import React, { useState } from 'react';
 import { useLocale } from '../../hooks/useLocale';
-import { LessonRecord, CourseRecord, recordLessonProgress } from './coursesService';
+import {
+  LessonRecord,
+  CourseRecord,
+  recordLessonProgress,
+  getLessonResourceDownloadUrl,
+} from './coursesService';
 import { SafeVideoPlayer } from './SafeVideoPlayer';
 import {
   ArrowLeft,
@@ -46,6 +51,20 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [successToast, setSuccessToast] = useState(false);
+  const [downloadingResourceId, setDownloadingResourceId] = useState<string | null>(null);
+
+  const handleDownloadResource = async (resourceId: string, fallbackUrl: string) => {
+    try {
+      setDownloadingResourceId(resourceId);
+      const url = await getLessonResourceDownloadUrl(resourceId);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.warn('Failed to obtain signed URL, using fallback', err);
+      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+    } finally {
+      setDownloadingResourceId(null);
+    }
+  };
 
   const handleToggleComplete = async () => {
     try {
@@ -161,12 +180,12 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {lesson.resources.map((res) => (
-                <a
+                <button
+                  type="button"
                   key={res.id}
-                  href={res.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-3 rounded-xl border border-slate-200 bg-white hover:border-[#356AE6] hover:bg-blue-50/30 transition-all flex items-center justify-between gap-3 text-start"
+                  onClick={() => handleDownloadResource(res.id, res.fileUrl)}
+                  disabled={downloadingResourceId === res.id}
+                  className="p-3 rounded-xl border border-slate-200 bg-white hover:border-[#356AE6] hover:bg-blue-50/30 transition-all flex items-center justify-between gap-3 text-start cursor-pointer disabled:opacity-60"
                 >
                   <div className="overflow-hidden">
                     <span className="block text-xs font-semibold text-slate-900 truncate">
@@ -177,7 +196,7 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
                     </span>
                   </div>
                   <Download className="w-4 h-4 text-[#356AE6] shrink-0" />
-                </a>
+                </button>
               ))}
             </div>
           </div>
