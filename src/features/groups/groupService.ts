@@ -265,7 +265,15 @@ export async function fetchGroupDetails(groupId: string): Promise<GroupDetailedV
           isPrimary: true,
         },
       ],
-      assignedCourses: [],
+      assignedCourses: [
+        {
+          courseId: 'demo-course-1',
+          title: 'IELTS Academic Writing & Speaking Mastery',
+          titleArabic: 'إتقان الكتابة والمحادثة الأكاديمية لاختبار الآيلتس',
+          level: 'advanced',
+          assignedAt: '2026-09-01T10:00:00Z',
+        },
+      ],
     };
   }
 

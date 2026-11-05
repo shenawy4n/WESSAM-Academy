@@ -33,6 +33,7 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   useEffect(() => {
     async function loadStudentData() {
       if (!supabase || !user) {
+        setCoursesCount(2);
         setLoading(false);
         return;
       }

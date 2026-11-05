@@ -15,6 +15,8 @@ import { TeacherDashboard } from './features/dashboard/TeacherDashboard';
 import { StudentDashboard } from './features/dashboard/StudentDashboard';
 import { StudentManagementView } from './features/students/StudentManagementView';
 import { GroupManagementView } from './features/groups/GroupManagementView';
+import { CoursesManagementView } from './features/courses/CoursesManagementView';
+import { StudentCoursesView } from './features/courses/StudentCoursesView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -120,36 +122,8 @@ function AppContent() {
           return <GroupManagementView />;
 
         case 'courses':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.courses}
-              subtitle={isRtl ? 'مناهج ودورات اللغة الإنجليزية' : 'English curricula and learning tracks'}
-              targetPhase="Phase 3 — Courses & Learning"
-              icon={BookOpen}
-              description={isRtl ? 'بناء المناهج التعليمية، وحدات الدروس، وربطها بالمجموعات الدراسية.' : 'Curriculum builder, course units, and group access permissions.'}
-              plannedCapabilities={[
-                isRtl ? 'إنشاء وتعديل المقررات الدراسية' : 'Course creation and curriculum authoring',
-                isRtl ? 'نشر وإخفاء المقررات حسب المجموعات' : 'Publishing controls and cohort visibility',
-                isRtl ? 'تقسيم المقررات إلى وحدات ودروس مرتبة' : 'Structured units and ordered lessons',
-              ]}
-            />
-          );
-
         case 'lessons':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.lessons}
-              subtitle={isRtl ? 'وحدات الدروس والمحتوى التعليمي' : 'Lesson modules and educational resources'}
-              targetPhase="Phase 3 — Courses & Learning"
-              icon={FileText}
-              description={isRtl ? 'إدارة محتوى الدروس، المذكرات، والملفات المرفقة.' : 'Lesson content editor, lecture handouts, and attached learning files.'}
-              plannedCapabilities={[
-                isRtl ? 'إرفاق المستندات والملفات التعليمية للتحميل' : 'Attach downloadable lesson materials',
-                isRtl ? 'التحكم في تسلسل وترتيب الدروس' : 'Sequential lesson ordering and access rules',
-                isRtl ? 'متابعة نسبة إنجاز الطلاب لكل درس' : 'Track individual lesson completion status',
-              ]}
-            />
-          );
+          return <CoursesManagementView />;
 
         case 'video':
           return (
@@ -376,36 +350,8 @@ function AppContent() {
           return <StudentDashboard onNavigate={(v) => setCurrentStudentView(v as StudentView)} />;
 
         case 'courses':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.myCourses}
-              subtitle={isRtl ? 'المناهج والدورات المسجلة لمجموعتك' : 'Enrolled courses for your group'}
-              targetPhase="Phase 3 — Courses & Learning"
-              icon={BookOpen}
-              description={isRtl ? 'ستظهر هنا المناهج الدراسية المسندة لمجموعتك بإشراف الأستاذ وسام.' : 'Your assigned English curricula will appear here upon cohort activation.'}
-              plannedCapabilities={[
-                isRtl ? 'استعراض وحدات المنهج والدروس' : 'Browse course units and lesson outlines',
-                isRtl ? 'تحميل الملخصات والمذكرات التدريبية' : 'Download class handouts and study sheets',
-                isRtl ? 'متابعة نسبة إنجازك الأكاديمي' : 'Real-time completion tracking',
-              ]}
-            />
-          );
-
         case 'lessons':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.lessons}
-              subtitle={isRtl ? 'الدروس والشروحات المسجلة' : 'Recorded lectures and lessons'}
-              targetPhase="Phase 3 — Courses & Learning"
-              icon={PlayCircle}
-              description={isRtl ? 'مشاهدة شروحات الدروس ومقاطع الفيديو التعليمية المصرح لك بالوصول إليها.' : 'Stream authorized video lessons and study materials.'}
-              plannedCapabilities={[
-                isRtl ? 'مشاهدة عالية الجودة ومحمية للمقاطع' : 'Secure streaming of video lessons',
-                isRtl ? 'تسجيل علامة اكتمال الدرس تلقائياً' : 'Automated lesson completion logging',
-                isRtl ? 'طرح الأسئلة وملاحظات الدرس' : 'Lesson notes and discussion queries',
-              ]}
-            />
-          );
+          return <StudentCoursesView />;
 
         case 'live-sessions':
           return (

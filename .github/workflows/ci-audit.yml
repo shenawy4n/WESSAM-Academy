@@ -64,7 +64,8 @@ jobs:
             20261104000002_harden_group_archive_authorization.sql \
             20261104000003_secure_archive_rpc_authorization.sql \
             20261104000004_minimize_archive_authorization_privileges.sql \
-            20261104000005_harden_groups_rls_update_protection.sql
+            20261104000005_harden_groups_rls_update_protection.sql \
+            20261104000006_courses_curriculum_management.sql
           do
             test -f "supabase/migrations/$migration" || {
               echo "::error::Missing migration: $migration"

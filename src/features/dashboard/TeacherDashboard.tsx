@@ -50,6 +50,14 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   useEffect(() => {
     async function loadMetrics() {
       if (!supabase) {
+        setMetrics({
+          totalStudents: 3,
+          activeStudents: 3,
+          totalGroups: 3,
+          activeCourses: 2,
+          upcomingLiveClasses: 0,
+          pendingReviews: 0,
+        });
         setLoading(false);
         return;
       }

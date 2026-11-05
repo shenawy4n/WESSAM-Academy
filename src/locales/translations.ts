@@ -241,6 +241,94 @@ export interface Translations {
     cannotArchiveInactive: string;
     cannotEnrollArchived: string;
   };
+  courses: {
+    title: string;
+    subtitle: string;
+    createCourse: string;
+    editCourse: string;
+    deleteCourse: string;
+    deleteCourseConfirm: string;
+    courseDetails: string;
+    searchPlaceholder: string;
+    allStatuses: string;
+    published: string;
+    draft: string;
+    allLevels: string;
+    beginner: string;
+    intermediate: string;
+    advanced: string;
+    level: string;
+    titleEn: string;
+    titleAr: string;
+    descEn: string;
+    descAr: string;
+    coverImageUrl: string;
+    publishCourse: string;
+    unpublishCourse: string;
+    publishedStatus: string;
+    draftStatus: string;
+    totalCourses: string;
+    units: string;
+    lessons: string;
+    assignedCohorts: string;
+    noCoursesFound: string;
+    noCoursesSubtitle: string;
+    manageCurriculum: string;
+    manageAssignments: string;
+    courseSettings: string;
+    addUnit: string;
+    editUnit: string;
+    deleteUnit: string;
+    deleteUnitConfirm: string;
+    unitTitleEn: string;
+    unitTitleAr: string;
+    moveUp: string;
+    moveDown: string;
+    addLesson: string;
+    editLesson: string;
+    deleteLesson: string;
+    deleteLessonConfirm: string;
+    lessonTitleEn: string;
+    lessonTitleAr: string;
+    lessonDescription: string;
+    durationMinutes: string;
+    videoUrl: string;
+    videoUrlHelp: string;
+    isPublishedLabel: string;
+    resources: string;
+    addResource: string;
+    resourceTitle: string;
+    resourceTitleAr: string;
+    resourceFileUrl: string;
+    deleteResource: string;
+    downloadResource: string;
+    noResources: string;
+    assignToGroup: string;
+    removeFromGroup: string;
+    assignedGroupsTitle: string;
+    noGroupsAssigned: string;
+    noGroupsAssignedDesc: string;
+    selectGroupToAssign: string;
+    confirmRemoveGroup: string;
+    enrolledStudentsCount: string;
+    myCourses: string;
+    myCoursesSubtitle: string;
+    courseProgress: string;
+    continueLearning: string;
+    startLearning: string;
+    completed: string;
+    markCompleted: string;
+    markIncomplete: string;
+    nextLesson: string;
+    previousLesson: string;
+    backToCourse: string;
+    backToCourses: string;
+    videoPlayer: string;
+    openInNewTab: string;
+    noCoursesAssignedStudent: string;
+    noCoursesAssignedStudentDesc: string;
+    lessonCompletedSuccess: string;
+  };
 }
 
 export const translations: Record<Language, Translations> = {
@@ -479,6 +567,94 @@ export const translations: Record<Language, Translations> = {
       cannotArchiveInactive: 'لا يمكن أرشفة مجموعة غير نشطة. يجب أن تكون المجموعة نشطة أولاً.',
       cannotEnrollArchived: 'لا يمكن تسكين طلاب في مجموعة مؤرشفة.',
     },
+    courses: {
+      title: 'إدارة المقررات والمناهج الدراسية',
+      subtitle: 'تصميم وبناء مناهج اللغة الإنجليزية، تنظيم الوحدات والدروس، وتوزيعها على المجموعات الدراسية',
+      createCourse: 'إنشاء مقرر دراسي جديد',
+      editCourse: 'تعديل بيانات المقرر',
+      deleteCourse: 'حذف المقرر',
+      deleteCourseConfirm: 'هل أنت متأكد من حذف هذا المقرر الدراسي؟ سيؤدي ذلك لحذف وحداته ودروسه التابعة.',
+      courseDetails: 'تفاصيل المقرر ومساحة العمل',
+      searchPlaceholder: 'البحث باسم المقرر أو الوصف...',
+      allStatuses: 'كافة الحالات',
+      published: 'منشور',
+      draft: 'مسودة',
+      allLevels: 'كافة المستويات',
+      beginner: 'مبتدئ (Beginner / A1-A2)',
+      intermediate: 'متوسط (Intermediate / B1-B2)',
+      advanced: 'متقدم (Advanced / C1-C2)',
+      level: 'المستوى التعليمي',
+      titleEn: 'اسم المقرر بالإنجليزية',
+      titleAr: 'اسم المقرر بالعربية',
+      descEn: 'وصف المقرر بالإنجليزية',
+      descAr: 'وصف المقرر بالعربية',
+      coverImageUrl: 'رابط صورة الغلاف (اختياري)',
+      publishCourse: 'نشر المقرر للطلاب',
+      unpublishCourse: 'تحويل المقرر إلى مسودة',
+      publishedStatus: 'منشور ومتاح للمجموعات',
+      draftStatus: 'مسودة قيد الإعداد',
+      totalCourses: 'إجمالي المقررات',
+      units: 'الوحدات الدراسية',
+      lessons: 'الدروس والشروحات',
+      assignedCohorts: 'المجموعات المسند إليها',
+      noCoursesFound: 'لم يتم العثور على أي مقررات دراسية',
+      noCoursesSubtitle: 'يمكنك البدء بإنشاء أول مقرر دراسي وإضافة وحدات الدروس لطلاب الأكاديمية.',
+      manageCurriculum: 'بناء المنهج والوحدات',
+      manageAssignments: 'تسكين المجموعات الدراسية',
+      courseSettings: 'بيانات وإعدادات المقرر',
+      addUnit: 'إضافة وحدة دراسية جديدة',
+      editUnit: 'تعديل اسم الوحدة',
+      deleteUnit: 'حذف الوحدة',
+      deleteUnitConfirm: 'هل أنت متأكد من حذف هذه الوحدة الدراسية وكافة الدروس المندرجة تحتها؟',
+      unitTitleEn: 'عنوان الوحدة بالإنجليزية',
+      unitTitleAr: 'عنوان الوحدة بالعربية',
+      moveUp: 'تحريك لأعلى',
+      moveDown: 'تحريك لأسفل',
+      addLesson: 'إضافة درس جديد',
+      editLesson: 'تعديل بيانات الدرس',
+      deleteLesson: 'حذف الدرس',
+      deleteLessonConfirm: 'هل أنت متأكد من حذف هذا الدرس وملفاته المرفقة؟',
+      lessonTitleEn: 'عنوان الدرس بالإنجليزية',
+      lessonTitleAr: 'عنوان الدرس بالعربية',
+      lessonDescription: 'وصف وشرح الدرس',
+      durationMinutes: 'المدة المقدرة (بالدقائق)',
+      videoUrl: 'رابط الفيديو التعليمي (YouTube أو Vimeo)',
+      videoUrlHelp: 'يدعم روابط يوتيوب وفيميو الآمنة HTTPS فقط لتشغيلها بسلاسة داخل المشغل الآمن.',
+      isPublishedLabel: 'نشر الدرس للطلاب المسجلين',
+      resources: 'المذكرات والملفات المرفقة',
+      addResource: 'إرفاق ملف تعليمي جديد',
+      resourceTitle: 'اسم المرفق بالإنجليزية',
+      resourceTitleAr: 'اسم المرفق بالعربية',
+      resourceFileUrl: 'رابط تحميل الملف (HTTPS)',
+      deleteResource: 'حذف المرفق',
+      downloadResource: 'تحميل المذكرة',
+      noResources: 'لا توجد مذكرات أو ملفات مرفقة لهذا الدرس بعد.',
+      assignToGroup: 'إسناد المقرر لمجموعة دراسية',
+      removeFromGroup: 'إلغاء إسناد المقرر',
+      assignedGroupsTitle: 'المجموعات الدراسية المسند إليها هذا المقرر',
+      noGroupsAssigned: 'لم يتم إسناد هذا المقرر إلى أي مجموعة دراسية بعد.',
+      noGroupsAssignedDesc: 'اختر مجموعة دراسية من القائمة لإتاحة محتوى المنهج لطلابها فوراً.',
+      selectGroupToAssign: 'اختر المجموعة الدراسية للإسناد',
+      confirmRemoveGroup: 'هل أنت متأكد من إلغاء إسناد المقرر لهذه المجموعة الدراسية؟',
+      enrolledStudentsCount: 'طالب ملتحق',
+      myCourses: 'مقرراتي الدراسية',
+      myCoursesSubtitle: 'استعرض المناهج المعتمدة لمجموعتك وتابع تقدمك التعليمي مع الأستاذ وسام',
+      courseProgress: 'نسبة الإنجاز',
+      continueLearning: 'متابعة التعلم',
+      startLearning: 'بدء دراسة المقرر',
+      completed: 'مكتمل',
+      markCompleted: 'تحديد كدرس مكتمل',
+      markIncomplete: 'إلغاء تحديد الاكتمال',
+      nextLesson: 'الدرس التالي',
+      previousLesson: 'الدرس السابق',
+      backToCourse: 'العودة للمقرر',
+      backToCourses: 'العودة لقائمة المقررات',
+      videoPlayer: 'المشغل التعليمي',
+      openInNewTab: 'فتح في نافذة جديدة',
+      noCoursesAssignedStudent: 'لا توجد مقررات دراسية متاحة حالياً',
+      noCoursesAssignedStudentDesc: 'سيقوم الأستاذ وسام بإسناد المناهج الدراسية لمجموعتك فور بدء الخطة التدريبية.',
+      lessonCompletedSuccess: 'أحسنت! تم توثيق إنجازك لهذا الدرس بنجاح في سجلك الأكاديمي.',
+    },
   },
   en: {
     common: {
@@ -714,6 +890,94 @@ export const translations: Record<Language, Translations> = {
       archivedBadge: 'Archived',
       cannotArchiveInactive: 'Cannot archive an inactive group. The group must be active before archiving.',
       cannotEnrollArchived: 'Cannot enroll students into an archived group.',
+    },
+    courses: {
+      title: 'Courses & Curriculum Management',
+      subtitle: 'Design English curricula, organize structured units and lessons, and assign them to student groups',
+      createCourse: 'Create New Course',
+      editCourse: 'Edit Course Details',
+      deleteCourse: 'Delete Course',
+      deleteCourseConfirm: 'Are you sure you want to delete this course? All associated units and lessons will be removed.',
+      courseDetails: 'Course Details & Workspace',
+      searchPlaceholder: 'Search by course title or description...',
+      allStatuses: 'All Statuses',
+      published: 'Published',
+      draft: 'Draft',
+      allLevels: 'All Levels',
+      beginner: 'Beginner (A1-A2)',
+      intermediate: 'Intermediate (B1-B2)',
+      advanced: 'Advanced (C1-C2)',
+      level: 'Proficiency Level',
+      titleEn: 'Course Title (English)',
+      titleAr: 'Course Title (Arabic)',
+      descEn: 'Description (English)',
+      descAr: 'Description (Arabic)',
+      coverImageUrl: 'Cover Image URL (Optional)',
+      publishCourse: 'Publish to Students',
+      unpublishCourse: 'Revert to Draft',
+      publishedStatus: 'Published & Active',
+      draftStatus: 'Draft in Progress',
+      totalCourses: 'Total Courses',
+      units: 'Units',
+      lessons: 'Lessons',
+      assignedCohorts: 'Assigned Groups',
+      noCoursesFound: 'No courses found',
+      noCoursesSubtitle: 'Start by creating your first English course and adding curriculum units.',
+      manageCurriculum: 'Curriculum & Units',
+      manageAssignments: 'Group Assignments',
+      courseSettings: 'Course Settings',
+      addUnit: 'Add New Unit',
+      editUnit: 'Edit Unit Title',
+      deleteUnit: 'Delete Unit',
+      deleteUnitConfirm: 'Are you sure you want to delete this unit and all of its lessons?',
+      unitTitleEn: 'Unit Title (English)',
+      unitTitleAr: 'Unit Title (Arabic)',
+      moveUp: 'Move Up',
+      moveDown: 'Move Down',
+      addLesson: 'Add New Lesson',
+      editLesson: 'Edit Lesson Details',
+      deleteLesson: 'Delete Lesson',
+      deleteLessonConfirm: 'Are you sure you want to delete this lesson and its attached resources?',
+      lessonTitleEn: 'Lesson Title (English)',
+      lessonTitleAr: 'Lesson Title (Arabic)',
+      lessonDescription: 'Lesson Outline & Description',
+      durationMinutes: 'Estimated Duration (Minutes)',
+      videoUrl: 'Video Lecture URL (YouTube or Vimeo)',
+      videoUrlHelp: 'Supports secure HTTPS YouTube and Vimeo links for safe embedded playback.',
+      isPublishedLabel: 'Publish Lesson for Students',
+      resources: 'Handouts & Lesson Files',
+      addResource: 'Attach Learning File',
+      resourceTitle: 'Resource Title (English)',
+      resourceTitleAr: 'Resource Title (Arabic)',
+      resourceFileUrl: 'Downloadable File URL (HTTPS)',
+      deleteResource: 'Remove File',
+      downloadResource: 'Download Handout',
+      noResources: 'No attached worksheets or files for this lesson yet.',
+      assignToGroup: 'Assign Course to Group',
+      removeFromGroup: 'Remove Assignment',
+      assignedGroupsTitle: 'Student Groups Assigned to this Course',
+      noGroupsAssigned: 'This course has not been assigned to any student group yet.',
+      noGroupsAssignedDesc: 'Select an active group below to grant its enrolled students instant access.',
+      selectGroupToAssign: 'Select Academic Group to Assign',
+      confirmRemoveGroup: 'Are you sure you want to remove this course from the selected group?',
+      enrolledStudentsCount: 'Enrolled Students',
+      myCourses: 'My Courses',
+      myCoursesSubtitle: 'Explore approved English curricula for your group and track your learning progress',
+      courseProgress: 'Course Progress',
+      continueLearning: 'Continue Learning',
+      startLearning: 'Start Course',
+      completed: 'Completed',
+      markCompleted: 'Mark as Completed',
+      markIncomplete: 'Mark as Incomplete',
+      nextLesson: 'Next Lesson',
+      previousLesson: 'Previous Lesson',
+      backToCourse: 'Back to Course',
+      backToCourses: 'Back to All Courses',
+      videoPlayer: 'Lesson Player',
+      openInNewTab: 'Open in New Window',
+      noCoursesAssignedStudent: 'No courses currently available',
+      noCoursesAssignedStudentDesc: 'Your teacher will assign learning tracks to your cohort soon.',
+      lessonCompletedSuccess: 'Well done! Lesson completion recorded in your academic record.',
     },
   },
 };
