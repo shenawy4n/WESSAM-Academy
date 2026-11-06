@@ -42,7 +42,89 @@ BEGIN
 END;
 $$;
 
--- Storage Objects RLS Policies
+-- ------------------------------------------------------------------------------
+-- 3. RECURSION-FREE AUTHORIZATION HELPERS
+-- ------------------------------------------------------------------------------
+
+-- Helper 1: Verify student assignment to published course without recursive RLS calls
+CREATE OR REPLACE FUNCTION public.is_student_assigned_to_course(p_course_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET row_security = off
+AS $$
+BEGIN
+    IF p_course_id IS NULL OR auth.uid() IS NULL THEN
+        RETURN false;
+    END IF;
+
+    -- Verify caller is an active student
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND p.role = 'student'
+          AND p.status = 'active'
+    ) THEN
+        RETURN false;
+    END IF;
+
+    -- Verify the course is published AND enrolled in an active, unarchived cohort group
+    RETURN EXISTS (
+        SELECT 1
+        FROM public.courses c
+        JOIN public.group_courses gc ON gc.course_id = c.id
+        JOIN public.groups g ON g.id = gc.group_id
+        JOIN public.group_students gs ON gs.group_id = g.id
+        WHERE c.id = p_course_id
+          AND c.is_published = true
+          AND g.is_active = true
+          AND g.archived_at IS NULL
+          AND gs.student_id = auth.uid()
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.is_student_assigned_to_course(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_student_assigned_to_course(uuid) TO authenticated;
+
+-- Helper 2: Verify teacher course ownership or super_admin access without recursive RLS
+CREATE OR REPLACE FUNCTION public.can_manage_course(p_course_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET row_security = off
+AS $$
+BEGIN
+    IF p_course_id IS NULL OR auth.uid() IS NULL THEN
+        RETURN false;
+    END IF;
+
+    IF public.is_super_admin() THEN
+        RETURN true;
+    END IF;
+
+    IF NOT public.is_teacher() THEN
+        RETURN false;
+    END IF;
+
+    RETURN EXISTS (
+        SELECT 1
+        FROM public.courses c
+        WHERE c.id = p_course_id
+          AND c.teacher_id = auth.uid()
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.can_manage_course(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.can_manage_course(uuid) TO authenticated;
+
+-- ------------------------------------------------------------------------------
+-- 4. STORAGE OBJECTS RLS POLICIES
+-- ------------------------------------------------------------------------------
 -- Note: storage.objects is owned by supabase_storage_admin with RLS enabled by default.
 -- Supabase extensions (supautils) permit postgres to manage policies directly without ALTER TABLE.
 DO $$
@@ -54,18 +136,8 @@ BEGIN
         TO authenticated
         WITH CHECK (
             bucket_id = 'learning-resources'
-            AND (
-                public.is_super_admin()
-                OR (
-                    public.is_teacher()
-                    AND split_part(name, '/', 2) ~ '^[0-9a-fA-F-]{36}$'
-                    AND EXISTS (
-                        SELECT 1 FROM public.courses c
-                        WHERE c.id = split_part(name, '/', 2)::uuid
-                          AND c.teacher_id = auth.uid()
-                    )
-                )
-            )
+            AND split_part(name, '/', 2) ~ '^[0-9a-fA-F-]{36}$'
+            AND public.can_manage_course(split_part(name, '/', 2)::uuid)
         );
 
         DROP POLICY IF EXISTS "Teachers delete learning resources" ON storage.objects;
@@ -74,18 +146,8 @@ BEGIN
         TO authenticated
         USING (
             bucket_id = 'learning-resources'
-            AND (
-                public.is_super_admin()
-                OR (
-                    public.is_teacher()
-                    AND split_part(name, '/', 2) ~ '^[0-9a-fA-F-]{36}$'
-                    AND EXISTS (
-                        SELECT 1 FROM public.courses c
-                        WHERE c.id = split_part(name, '/', 2)::uuid
-                          AND c.teacher_id = auth.uid()
-                    )
-                )
-            )
+            AND split_part(name, '/', 2) ~ '^[0-9a-fA-F-]{36}$'
+            AND public.can_manage_course(split_part(name, '/', 2)::uuid)
         );
 
         DROP POLICY IF EXISTS "Authorized users read learning resources storage" ON storage.objects;
@@ -95,31 +157,18 @@ BEGIN
         USING (
             bucket_id = 'learning-resources'
             AND (
-                public.is_super_admin()
-                OR (
-                    public.is_teacher()
-                    AND split_part(name, '/', 2) ~ '^[0-9a-fA-F-]{36}$'
-                    AND EXISTS (
-                        SELECT 1 FROM public.courses c
-                        WHERE c.id = split_part(name, '/', 2)::uuid
-                          AND c.teacher_id = auth.uid()
-                    )
+                (
+                    split_part(name, '/', 2) ~ '^[0-9a-fA-F-]{36}$'
+                    AND public.can_manage_course(split_part(name, '/', 2)::uuid)
                 )
                 OR (
-                    public.is_active_student()
-                    AND split_part(name, '/', 4) ~ '^[0-9a-fA-F-]{36}$'
+                    split_part(name, '/', 4) ~ '^[0-9a-fA-F-]{36}$'
                     AND EXISTS (
                         SELECT 1
                         FROM public.lessons l
-                        JOIN public.courses c ON c.id = l.course_id
-                        JOIN public.group_courses gc ON gc.course_id = c.id
-                        JOIN public.groups g ON g.id = gc.group_id
                         WHERE l.id = split_part(name, '/', 4)::uuid
                           AND l.is_published = true
-                          AND c.is_published = true
-                          AND g.is_active = true
-                          AND g.archived_at IS NULL
-                          AND public.is_student_in_group(gc.group_id)
+                          AND public.is_student_assigned_to_course(l.course_id)
                     )
                 )
             )
@@ -129,7 +178,7 @@ END;
 $$;
 
 -- ------------------------------------------------------------------------------
--- 3. AUDIT & REPAIR RLS: COURSES & CURRICULUM
+-- 5. AUDIT & REPAIR RLS: COURSES & CURRICULUM
 -- ------------------------------------------------------------------------------
 
 -- (A) Courses RLS: Restrict modifications to the course owner teacher or super_admin
@@ -169,17 +218,11 @@ CREATE POLICY "Teachers delete own courses" ON public.courses
         OR public.is_super_admin()
     );
 
+-- Uses recursion-free SECURITY DEFINER helper
 CREATE POLICY "Students view assigned or published courses" ON public.courses
     FOR SELECT TO authenticated
     USING (
-        is_published = true AND EXISTS (
-            SELECT 1 FROM public.group_courses gc
-            JOIN public.groups g ON g.id = gc.group_id
-            WHERE gc.course_id = courses.id
-              AND g.is_active = true
-              AND g.archived_at IS NULL
-              AND public.is_student_in_group(gc.group_id)
-        )
+        public.is_student_assigned_to_course(courses.id)
     );
 
 -- (B) Course Units RLS
@@ -197,53 +240,28 @@ CREATE POLICY "Teachers view course units" ON public.course_units
 CREATE POLICY "Teachers insert course units" ON public.course_units
     FOR INSERT TO authenticated
     WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            WHERE c.id = course_units.course_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(course_units.course_id)
     );
 
 CREATE POLICY "Teachers update course units" ON public.course_units
     FOR UPDATE TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            WHERE c.id = course_units.course_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(course_units.course_id)
     )
     WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            WHERE c.id = course_units.course_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(course_units.course_id)
     );
 
 CREATE POLICY "Teachers delete course units" ON public.course_units
     FOR DELETE TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            WHERE c.id = course_units.course_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(course_units.course_id)
     );
 
 CREATE POLICY "Students view units of accessible courses" ON public.course_units
     FOR SELECT TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            JOIN public.group_courses gc ON gc.course_id = c.id
-            JOIN public.groups g ON g.id = gc.group_id
-            WHERE c.id = course_units.course_id
-              AND c.is_published = true
-              AND g.is_active = true
-              AND g.archived_at IS NULL
-              AND public.is_student_in_group(gc.group_id)
-        )
+        public.is_student_assigned_to_course(course_units.course_id)
     );
 
 -- (C) Lessons RLS
@@ -261,59 +279,29 @@ CREATE POLICY "Teachers view lessons" ON public.lessons
 CREATE POLICY "Teachers insert lessons" ON public.lessons
     FOR INSERT TO authenticated
     WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            JOIN public.course_units u ON u.course_id = c.id
-            WHERE c.id = lessons.course_id
-              AND u.id = lessons.unit_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(lessons.course_id)
     );
 
 CREATE POLICY "Teachers update lessons" ON public.lessons
     FOR UPDATE TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            JOIN public.course_units u ON u.course_id = c.id
-            WHERE c.id = lessons.course_id
-              AND u.id = lessons.unit_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(lessons.course_id)
     )
     WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            JOIN public.course_units u ON u.course_id = c.id
-            WHERE c.id = lessons.course_id
-              AND u.id = lessons.unit_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(lessons.course_id)
     );
 
 CREATE POLICY "Teachers delete lessons" ON public.lessons
     FOR DELETE TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            WHERE c.id = lessons.course_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(lessons.course_id)
     );
 
 CREATE POLICY "Students view published lessons" ON public.lessons
     FOR SELECT TO authenticated
     USING (
-        is_published = true AND EXISTS (
-            SELECT 1 FROM public.courses c
-            JOIN public.group_courses gc ON gc.course_id = c.id
-            JOIN public.groups g ON g.id = gc.group_id
-            WHERE c.id = lessons.course_id
-              AND c.is_published = true
-              AND g.is_active = true
-              AND g.archived_at IS NULL
-              AND public.is_student_in_group(gc.group_id)
-        )
+        lessons.is_published = true
+        AND public.is_student_assigned_to_course(lessons.course_id)
     );
 
 -- (D) Lesson Resources RLS
@@ -333,9 +321,8 @@ CREATE POLICY "Teachers insert lesson resources" ON public.lesson_resources
     WITH CHECK (
         EXISTS (
             SELECT 1 FROM public.lessons l
-            JOIN public.courses c ON c.id = l.course_id
             WHERE l.id = lesson_resources.lesson_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
+              AND public.can_manage_course(l.course_id)
         )
     );
 
@@ -344,17 +331,15 @@ CREATE POLICY "Teachers update lesson resources" ON public.lesson_resources
     USING (
         EXISTS (
             SELECT 1 FROM public.lessons l
-            JOIN public.courses c ON c.id = l.course_id
             WHERE l.id = lesson_resources.lesson_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
+              AND public.can_manage_course(l.course_id)
         )
     )
     WITH CHECK (
         EXISTS (
             SELECT 1 FROM public.lessons l
-            JOIN public.courses c ON c.id = l.course_id
             WHERE l.id = lesson_resources.lesson_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
+              AND public.can_manage_course(l.course_id)
         )
     );
 
@@ -363,9 +348,8 @@ CREATE POLICY "Teachers delete lesson resources" ON public.lesson_resources
     USING (
         EXISTS (
             SELECT 1 FROM public.lessons l
-            JOIN public.courses c ON c.id = l.course_id
             WHERE l.id = lesson_resources.lesson_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
+              AND public.can_manage_course(l.course_id)
         )
     );
 
@@ -374,15 +358,9 @@ CREATE POLICY "Students view resources for accessible lessons" ON public.lesson_
     USING (
         EXISTS (
             SELECT 1 FROM public.lessons l
-            JOIN public.courses c ON c.id = l.course_id
-            JOIN public.group_courses gc ON gc.course_id = c.id
-            JOIN public.groups g ON g.id = gc.group_id
             WHERE l.id = lesson_resources.lesson_id
               AND l.is_published = true
-              AND c.is_published = true
-              AND g.is_active = true
-              AND g.archived_at IS NULL
-              AND public.is_student_in_group(gc.group_id)
+              AND public.is_student_assigned_to_course(l.course_id)
         )
     );
 
@@ -393,30 +371,16 @@ DROP POLICY IF EXISTS "Students view assigned group courses" ON public.group_cou
 CREATE POLICY "Teachers manage group courses" ON public.group_courses
     FOR ALL TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            WHERE c.id = group_courses.course_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(group_courses.course_id)
     )
     WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.courses c
-            WHERE c.id = group_courses.course_id
-              AND (c.teacher_id = auth.uid() OR public.is_super_admin())
-        )
+        public.can_manage_course(group_courses.course_id)
     );
 
 CREATE POLICY "Students view assigned group courses" ON public.group_courses
     FOR SELECT TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.groups g
-            WHERE g.id = group_courses.group_id
-              AND g.is_active = true
-              AND g.archived_at IS NULL
-              AND public.is_student_in_group(g.id)
-        )
+        public.is_student_in_group(group_courses.group_id)
     );
 
 -- (F) Lesson Progress RLS
@@ -441,18 +405,13 @@ CREATE POLICY "Teachers view lesson progress" ON public.lesson_progress
 CREATE POLICY "Students record verified lesson progress" ON public.lesson_progress
     FOR INSERT TO authenticated
     WITH CHECK (
-        student_id = auth.uid() AND public.is_active_student() AND EXISTS (
-            SELECT 1
-            FROM public.lessons l
-            JOIN public.courses c ON c.id = l.course_id
-            JOIN public.group_courses gc ON gc.course_id = c.id
-            JOIN public.groups g ON g.id = gc.group_id
+        student_id = auth.uid()
+        AND public.is_active_student()
+        AND EXISTS (
+            SELECT 1 FROM public.lessons l
             WHERE l.id = lesson_progress.lesson_id
               AND l.is_published = true
-              AND c.is_published = true
-              AND g.is_active = true
-              AND g.archived_at IS NULL
-              AND public.is_student_in_group(gc.group_id)
+              AND public.is_student_assigned_to_course(l.course_id)
         )
     );
 
@@ -462,18 +421,13 @@ CREATE POLICY "Students update verified lesson progress" ON public.lesson_progre
         student_id = auth.uid() AND public.is_active_student()
     )
     WITH CHECK (
-        student_id = auth.uid() AND public.is_active_student() AND EXISTS (
-            SELECT 1
-            FROM public.lessons l
-            JOIN public.courses c ON c.id = l.course_id
-            JOIN public.group_courses gc ON gc.course_id = c.id
-            JOIN public.groups g ON g.id = gc.group_id
+        student_id = auth.uid()
+        AND public.is_active_student()
+        AND EXISTS (
+            SELECT 1 FROM public.lessons l
             WHERE l.id = lesson_progress.lesson_id
               AND l.is_published = true
-              AND c.is_published = true
-              AND g.is_active = true
-              AND g.archived_at IS NULL
-              AND public.is_student_in_group(gc.group_id)
+              AND public.is_student_assigned_to_course(l.course_id)
         )
     );
 

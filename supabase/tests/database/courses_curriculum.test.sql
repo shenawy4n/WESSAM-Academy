@@ -5,7 +5,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(31);
+SELECT extensions.plan(46);
 
 -- 1. Deterministic isolated identities
 INSERT INTO auth.users (
@@ -43,7 +43,9 @@ ON CONFLICT (group_id, student_id) DO NOTHING;
 -- 3. Test Course, Units, and Lessons with Valid Hex Deterministic UUIDs
 INSERT INTO public.courses (id, teacher_id, title, title_arabic, level, is_published)
 VALUES
-  ('cccccccc-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'English Mastery B1', 'إتقان الإنجليزية B1', 'intermediate', true)
+  ('cccccccc-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'English Mastery B1', 'إتقان الإنجليزية B1', 'intermediate', true),
+  ('cccccccc-2222-4222-8222-222222222222', '88888888-8888-4888-8888-888888888888', 'Advanced Grammar C1', 'قواعد متقدمة C1', 'advanced', true),
+  ('cccccccc-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Draft Course', 'منهج مسودة', 'beginner', false)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.course_units (id, course_id, title, title_arabic, order_index)
@@ -396,6 +398,144 @@ SELECT extensions.throws_ok(
   '42501',
   'Forbidden: Lesson is not accessible or not published',
   'Student blocked from recording progress after course group unassignment'
+);
+
+-- -----------------------------------------------------------------------------
+-- TEST SUITE: RLS Non-Recursion & Helper Function Regression Suite
+-- -----------------------------------------------------------------------------
+
+-- Re-assign course 1 to active cohort for RLS tests
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+SELECT public.assign_course_to_group('cccccccc-1111-4111-8111-111111111111', 'aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc');
+
+-- Test 32: Teacher owner can read their own courses
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'),
+  1,
+  'Teacher owner can read their own course'
+);
+
+-- Test 33: Teacher can query both courses and group_courses in a single query without recursion
+SELECT extensions.lives_ok(
+  $$SELECT c.id, c.title, gc.group_id
+    FROM public.courses c
+    LEFT JOIN public.group_courses gc ON gc.course_id = c.id
+    WHERE c.id = 'cccccccc-1111-4111-8111-111111111111'$$,
+  'Cross-table query between courses and group_courses succeeds without recursion'
+);
+
+-- Test 34: Teacher cannot manage another teacher course assignment in group_courses
+SELECT extensions.throws_ok(
+  $$INSERT INTO public.group_courses (course_id, group_id)
+    VALUES ('cccccccc-2222-4222-8222-222222222222', 'aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc')$$,
+  '42501',
+  NULL,
+  'Teacher cannot insert group_courses assignment for another teacher course'
+);
+
+-- Switch to Other Teacher
+SELECT set_config('request.jwt.claim.sub', '88888888-8888-4888-8888-888888888888', true);
+
+-- Test 35: Other teacher cannot manage course 1 in group_courses
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.group_courses WHERE course_id = 'cccccccc-1111-4111-8111-111111111111'),
+  0,
+  'Other teacher cannot see group_courses assignment for course they do not own'
+);
+
+-- Switch to Super Admin
+SELECT set_config('request.jwt.claim.sub', '99999999-9999-4999-8999-999999999999', true);
+
+-- Test 36: Super Admin can read all courses and manage group courses
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.courses WHERE id IN ('cccccccc-1111-4111-8111-111111111111', 'cccccccc-2222-4222-8222-222222222222', 'cccccccc-3333-4333-8333-333333333333')),
+  3,
+  'Super Admin can read all courses across teachers'
+);
+
+-- Switch to Enrolled Active Student (student 1 in active cohort)
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+
+-- Test 37: Enrolled student can read their assigned published course
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'),
+  1,
+  'Enrolled student can read assigned published course'
+);
+
+-- Test 38: Enrolled student cannot read unpublished draft course
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.courses WHERE id = 'cccccccc-3333-4333-8333-333333333333'),
+  0,
+  'Student cannot read unpublished draft course'
+);
+
+-- Test 39: Enrolled student cannot update or mutate courses table
+SELECT extensions.throws_ok(
+  $$UPDATE public.courses SET title = 'Hacked Title' WHERE id = 'cccccccc-1111-4111-8111-111111111111'$$,
+  '42501',
+  NULL,
+  'Student cannot update courses'
+);
+
+-- Test 40: Enrolled student cannot delete courses
+SELECT extensions.throws_ok(
+  $$DELETE FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'$$,
+  '42501',
+  NULL,
+  'Student cannot delete courses'
+);
+
+-- Switch to Unassigned Student
+SELECT set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', true);
+
+-- Test 41: Unassigned student cannot read course 1
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'),
+  0,
+  'Unassigned student cannot read course 1'
+);
+
+-- Test 42: Helper is_student_assigned_to_course returns false for unassigned student
+SELECT extensions.is(
+  public.is_student_assigned_to_course('cccccccc-1111-4111-8111-111111111111'),
+  false,
+  'is_student_assigned_to_course returns false for unassigned student'
+);
+
+-- Test 43: Helper can_manage_course returns false for student
+SELECT extensions.is(
+  public.can_manage_course('cccccccc-1111-4111-8111-111111111111'),
+  false,
+  'can_manage_course returns false for student'
+);
+
+-- Switch to Anon Role
+SET LOCAL ROLE anon;
+SELECT set_config('request.jwt.claim.sub', '', true);
+
+-- Test 44: Anon cannot read any courses
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.courses),
+  0,
+  'Anon cannot read any courses'
+);
+
+-- Test 45: Anon execution of is_student_assigned_to_course is rejected (REVOKE FROM PUBLIC)
+SELECT extensions.throws_ok(
+  $$SELECT public.is_student_assigned_to_course('cccccccc-1111-4111-8111-111111111111')$$,
+  '42501',
+  NULL,
+  'Anon cannot execute is_student_assigned_to_course helper'
+);
+
+-- Test 46: Anon execution of can_manage_course is rejected (REVOKE FROM PUBLIC)
+SELECT extensions.throws_ok(
+  $$SELECT public.can_manage_course('cccccccc-1111-4111-8111-111111111111')$$,
+  '42501',
+  NULL,
+  'Anon cannot execute can_manage_course helper'
 );
 
 SELECT * FROM extensions.finish();
