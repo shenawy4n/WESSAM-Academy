@@ -43,10 +43,16 @@ END;
 $$;
 
 -- Storage Objects RLS Policies
+-- Note: storage.objects is owned by supabase_storage_admin with RLS enabled by default.
+-- Policy definition statements are executed under transaction-local role switching to supabase_storage_admin.
 DO $$
+DECLARE
+    _prev_role text;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'storage' AND tablename = 'objects') THEN
-        ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+        -- Preserve caller role and switch locally to supabase_storage_admin
+        SELECT current_user INTO _prev_role;
+        EXECUTE 'SET LOCAL ROLE supabase_storage_admin';
 
         DROP POLICY IF EXISTS "Teachers upload learning resources" ON storage.objects;
         CREATE POLICY "Teachers upload learning resources"
@@ -124,6 +130,9 @@ BEGIN
                 )
             )
         );
+
+        -- Restore caller role
+        EXECUTE 'SET LOCAL ROLE ' || quote_ident(_prev_role);
     END IF;
 END;
 $$;
