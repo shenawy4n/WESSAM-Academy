@@ -23,7 +23,10 @@ import {
   ArrowUpRight,
   ShieldCheck,
   GraduationCap,
+  Clock,
+  Video,
 } from 'lucide-react';
+import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
 
 interface MetricCount {
   totalStudents: number;
@@ -32,6 +35,17 @@ interface MetricCount {
   activeCourses: number;
   upcomingLiveClasses: number;
   pendingReviews: number;
+}
+
+interface UpcomingSessionItem {
+  id: string;
+  title: string;
+  title_arabic?: string | null;
+  scheduled_at: string;
+  duration_minutes: number;
+  provider: string;
+  group_name?: string;
+  group_name_arabic?: string | null;
 }
 
 export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> = ({ onNavigate }) => {
@@ -46,6 +60,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
     upcomingLiveClasses: 0,
     pendingReviews: 0,
   });
+  const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionItem[]>([]);
 
   useEffect(() => {
     async function loadMetrics() {
@@ -63,7 +78,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
       }
       try {
         setLoading(true);
-        // Query actual counts from PostgreSQL
+        // Query actual counts and upcoming live sessions from PostgreSQL
         const [
           { count: studentsCount },
           { count: activeStudentsCount },
@@ -71,6 +86,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
           { count: coursesCount },
           { count: liveCount },
           { count: submissionsCount },
+          { data: sessionRows },
         ] = await Promise.all([
           supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
           supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('status', 'active'),
@@ -78,6 +94,23 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
           supabase.from('courses').select('id', { count: 'exact', head: true }).eq('is_published', true),
           supabase.from('live_sessions').select('id', { count: 'exact', head: true }).eq('status', 'scheduled'),
           supabase.from('submissions').select('id', { count: 'exact', head: true }).is('graded_at', null),
+          supabase
+            .from('live_sessions')
+            .select(`
+              id,
+              title,
+              title_arabic,
+              scheduled_at,
+              duration_minutes,
+              provider,
+              groups:group_id (
+                name,
+                name_arabic
+              )
+            `)
+            .eq('status', 'scheduled')
+            .order('scheduled_at', { ascending: true })
+            .limit(3),
         ]);
 
         setMetrics({
@@ -88,6 +121,20 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
           upcomingLiveClasses: liveCount || 0,
           pendingReviews: submissionsCount || 0,
         });
+
+        if (sessionRows) {
+          const mapped: UpcomingSessionItem[] = sessionRows.map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            title_arabic: r.title_arabic,
+            scheduled_at: r.scheduled_at,
+            duration_minutes: r.duration_minutes || 60,
+            provider: r.provider,
+            group_name: r.groups?.name,
+            group_name_arabic: r.groups?.name_arabic,
+          }));
+          setUpcomingSessions(mapped);
+        }
       } catch (err) {
         console.error('Failed to query metrics from database:', err);
       } finally {
@@ -229,7 +276,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               }
             />
             <CardContent>
-              {metrics.upcomingLiveClasses === 0 ? (
+              {upcomingSessions.length === 0 ? (
                 <EmptyState
                   icon={<Radio className="w-6 h-6 text-slate-400" />}
                   title={t.teacherDashboard.noUpcomingClasses}
@@ -238,8 +285,44 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
                   onAction={() => onNavigate('live-sessions')}
                 />
               ) : (
-                <div className="text-xs text-slate-600">
-                  {/* Future dynamic listing */}
+                <div className="divide-y divide-slate-100">
+                  {upcomingSessions.map((session) => {
+                    const isLive = isSessionLive(session.scheduled_at, session.duration_minutes);
+                    return (
+                      <div key={session.id} className="py-3 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            {isLive && (
+                              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                            )}
+                            <h4 className="text-xs sm:text-sm font-bold text-[#14243A]">
+                              {isRtl ? (session.title_arabic || session.title) : session.title}
+                            </h4>
+                            {session.group_name && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">
+                                {isRtl ? (session.group_name_arabic || session.group_name) : session.group_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1">
+                            <span>{formatRiyadhDateTime(session.scheduled_at, { locale: isRtl ? 'ar' : 'en' })}</span>
+                            <span>•</span>
+                            <span>{session.duration_minutes} {isRtl ? 'دقيقة' : 'min'}</span>
+                            <span>•</span>
+                            <span className="uppercase text-[10px] font-medium">{session.provider}</span>
+                          </div>
+                        </div>
+
+                        <Button
+                          variant={isLive ? 'gold' : 'outline'}
+                          size="sm"
+                          onClick={() => onNavigate('live-sessions')}
+                        >
+                          {isLive ? (isRtl ? 'مباشر الآن' : 'Live Now') : (isRtl ? 'إدارة' : 'Manage')}
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

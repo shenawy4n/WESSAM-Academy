@@ -17,6 +17,9 @@ import { StudentManagementView } from './features/students/StudentManagementView
 import { GroupManagementView } from './features/groups/GroupManagementView';
 import { CoursesManagementView } from './features/courses/CoursesManagementView';
 import { StudentCoursesView } from './features/courses/StudentCoursesView';
+import { LiveSessionsManagementView } from './features/liveSessions/LiveSessionsManagementView';
+import { AttendanceReportsView } from './features/liveSessions/AttendanceReportsView';
+import { StudentLiveSessionsView } from './features/liveSessions/StudentLiveSessionsView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -142,36 +145,10 @@ function AppContent() {
           );
 
         case 'live-sessions':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.liveClasses}
-              subtitle={isRtl ? 'الحصص التفاعلية المباشرة (Zoom / Google Meet)' : 'Interactive live classes'}
-              targetPhase="Phase 4 — Live Classes & Attendance"
-              icon={Radio}
-              description={isRtl ? 'جدولة الحصص المباشرة بتوقيت مكة المكرمة وتوجيه الروابط للطلاب المصرح لهم فقط.' : 'Schedule live interactive classes in Asia/Riyadh timezone with cohort-restricted meeting links.'}
-              plannedCapabilities={[
-                isRtl ? 'جدولة الحصص حسب توقيت المملكة (Asia/Riyadh)' : 'Schedule sessions in Asia/Riyadh timezone',
-                isRtl ? 'حصر الروابط للمجموعات المستهدفة فقط' : 'Restrict meeting links to authorized students',
-                isRtl ? 'ربط الحصص بسجل الحضور التلقائي واليدوي' : 'Link sessions to academic attendance records',
-              ]}
-            />
-          );
+          return <LiveSessionsManagementView />;
 
         case 'attendance':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.attendance}
-              subtitle={isRtl ? 'سجل حضور وغياب الطلاب' : 'Student attendance registry'}
-              targetPhase="Phase 4 — Live Classes & Attendance"
-              icon={UserCheck}
-              description={isRtl ? 'رصد وتوثيق الحضور والغياب للحصص التفاعلية، مع تقارير التزام الطالب.' : 'Track presence, absence, late arrivals, and excuses for live sessions.'}
-              plannedCapabilities={[
-                isRtl ? 'رصد سريع لحضور المجموعة في ثوانٍ' : 'Rapid roster roll-call',
-                isRtl ? 'سجل تاريخي غير قابل للتعديل من الطلاب' : 'Immutable attendance logs protected via RLS',
-                isRtl ? 'إحصائيات ونسب الالتزام بالحضور' : 'Attendance compliance percentages',
-              ]}
-            />
-          );
+          return <AttendanceReportsView />;
 
         case 'question-bank':
           return (
@@ -354,20 +331,7 @@ function AppContent() {
           return <StudentCoursesView />;
 
         case 'live-sessions':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.liveClasses}
-              subtitle={isRtl ? 'الحصص المباشرة القادمة والسابقة' : 'Live classes schedule'}
-              targetPhase="Phase 4 — Live Classes & Attendance"
-              icon={Radio}
-              description={isRtl ? 'الوصول المباشر لحصص الزوم وجوجل ميت بمجرد حلول موعد البث.' : 'Direct access to scheduled live sessions with Mr. Wessam.'}
-              plannedCapabilities={[
-                isRtl ? 'رابط الدخول المباشر للحصة' : 'One-click launch into authorized live room',
-                isRtl ? 'توقيت الحصص وفق توقيت مكة المكرمة' : 'Sessions scheduled in Asia/Riyadh time',
-                isRtl ? 'توثيق حضورك في سجل الحصة' : 'Automatic presence registration upon joining',
-              ]}
-            />
-          );
+          return <StudentLiveSessionsView />;
 
         case 'assignments':
           return (

@@ -20,7 +20,19 @@ import {
   PlayCircle,
   GraduationCap,
   Calendar,
+  Video,
 } from 'lucide-react';
+import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
+import { getAuthorizedMeetingLink } from '../liveSessions/liveSessionsService';
+
+interface StudentUpcomingSession {
+  id: string;
+  title: string;
+  title_arabic?: string | null;
+  scheduled_at: string;
+  duration_minutes: number;
+  provider: string;
+}
 
 export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> = ({ onNavigate }) => {
   const { t, isRtl } = useLocale();
@@ -29,6 +41,8 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   const [coursesCount, setCoursesCount] = useState<number>(0);
   const [liveSessionsCount, setLiveSessionsCount] = useState<number>(0);
   const [assignmentsCount, setAssignmentsCount] = useState<number>(0);
+  const [upcomingSessions, setUpcomingSessions] = useState<StudentUpcomingSession[]>([]);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadStudentData() {
@@ -40,12 +54,22 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
       try {
         setLoading(true);
         if (studentProfile?.groupId) {
-          const [{ count: cCount }, { count: sCount }] = await Promise.all([
+          const [{ count: cCount }, { count: sCount }, { data: sessionRows }] = await Promise.all([
             supabase.from('group_courses').select('id', { count: 'exact', head: true }).eq('group_id', studentProfile.groupId),
             supabase.from('live_sessions').select('id', { count: 'exact', head: true }).eq('group_id', studentProfile.groupId).eq('status', 'scheduled'),
+            supabase
+              .from('live_sessions')
+              .select('id, title, title_arabic, scheduled_at, duration_minutes, provider')
+              .eq('group_id', studentProfile.groupId)
+              .eq('status', 'scheduled')
+              .order('scheduled_at', { ascending: true })
+              .limit(3),
           ]);
           setCoursesCount(cCount || 0);
           setLiveSessionsCount(sCount || 0);
+          if (sessionRows) {
+            setUpcomingSessions(sessionRows as StudentUpcomingSession[]);
+          }
         }
       } catch (err) {
         console.error('Error querying student dashboard data:', err);
@@ -55,6 +79,20 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
     }
     loadStudentData();
   }, [user, studentProfile]);
+
+  const handleJoinClass = async (sessionId: string) => {
+    try {
+      setJoiningId(sessionId);
+      const link = await getAuthorizedMeetingLink(sessionId);
+      if (link) {
+        window.open(link, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      console.error('Failed to get meeting link:', err);
+    } finally {
+      setJoiningId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -158,13 +196,68 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
             <CardHeader
               title={t.studentDashboard.upcomingLiveClasses}
               subtitle={t.common.timezoneNotice}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigate('live-sessions')}
+                  icon={<Calendar className="w-3.5 h-3.5" />}
+                >
+                  {isRtl ? 'عرض الجدول' : 'View Schedule'}
+                </Button>
+              }
             />
             <CardContent>
-              <EmptyState
-                icon={<Radio className="w-6 h-6 text-slate-400" />}
-                title={t.studentDashboard.noUpcomingClasses}
-                description={isRtl ? 'سيصلك تنبيه فوري بالرابط وموعد الحصة فور جدولتها.' : 'You will be notified once a live session is scheduled.'}
-              />
+              {upcomingSessions.length === 0 ? (
+                <EmptyState
+                  icon={<Radio className="w-6 h-6 text-slate-400" />}
+                  title={t.studentDashboard.noUpcomingClasses}
+                  description={isRtl ? 'سيصلك تنبيه فوري بالرابط وموعد الحصة فور جدولتها.' : 'You will be notified once a live session is scheduled.'}
+                />
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {upcomingSessions.map((session) => {
+                    const isLive = isSessionLive(session.scheduled_at, session.duration_minutes);
+                    return (
+                      <div key={session.id} className="py-3 space-y-2 first:pt-0 last:pb-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            {isLive && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 mb-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
+                                {isRtl ? 'مباشر الآن' : 'Live Now'}
+                              </span>
+                            )}
+                            <h4 className="text-xs font-bold text-[#14243A]">
+                              {isRtl ? (session.title_arabic || session.title) : session.title}
+                            </h4>
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              {formatRiyadhDateTime(session.scheduled_at, { locale: isRtl ? 'ar' : 'en' })}
+                            </div>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 bg-slate-100 rounded text-slate-600 uppercase font-medium">
+                            {session.provider}
+                          </span>
+                        </div>
+                        <Button
+                          variant={isLive ? 'gold' : 'outline'}
+                          size="sm"
+                          className="w-full text-xs"
+                          disabled={joiningId === session.id}
+                          onClick={() => handleJoinClass(session.id)}
+                          icon={joiningId === session.id ? undefined : <Video className="w-3.5 h-3.5" />}
+                        >
+                          {joiningId === session.id
+                            ? (isRtl ? 'جاري التحقق...' : 'Checking...')
+                            : isLive
+                            ? (isRtl ? 'انضم الآن' : 'Join Live')
+                            : (isRtl ? 'دخول القاعة' : 'Launch Meeting')}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
 
