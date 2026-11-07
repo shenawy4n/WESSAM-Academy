@@ -41,7 +41,7 @@ interface UpcomingSessionItem {
   id: string;
   title: string;
   title_arabic?: string | null;
-  scheduled_at: string;
+  start_time: string;
   duration_minutes: number;
   provider: string;
   group_name?: string;
@@ -100,7 +100,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               id,
               title,
               title_arabic,
-              scheduled_at,
+              start_time,
               duration_minutes,
               provider,
               groups:group_id (
@@ -109,7 +109,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               )
             `)
             .eq('status', 'scheduled')
-            .order('scheduled_at', { ascending: true })
+            .order('start_time', { ascending: true })
             .limit(3),
         ]);
 
@@ -127,7 +127,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
             id: r.id,
             title: r.title,
             title_arabic: r.title_arabic,
-            scheduled_at: r.scheduled_at,
+            start_time: r.start_time,
             duration_minutes: r.duration_minutes || 60,
             provider: r.provider,
             group_name: r.groups?.name,
@@ -287,7 +287,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               ) : (
                 <div className="divide-y divide-slate-100">
                   {upcomingSessions.map((session) => {
-                    const isLive = isSessionLive(session.scheduled_at, session.duration_minutes);
+                    const isLive = isSessionLive(session.start_time, session.duration_minutes);
                     return (
                       <div key={session.id} className="py-3 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
                         <div>
@@ -305,7 +305,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
                             )}
                           </div>
                           <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1">
-                            <span>{formatRiyadhDateTime(session.scheduled_at, { locale: isRtl ? 'ar' : 'en' })}</span>
+                            <span>{formatRiyadhDateTime(session.start_time, { locale: isRtl ? 'ar' : 'en' })}</span>
                             <span>•</span>
                             <span>{session.duration_minutes} {isRtl ? 'دقيقة' : 'min'}</span>
                             <span>•</span>

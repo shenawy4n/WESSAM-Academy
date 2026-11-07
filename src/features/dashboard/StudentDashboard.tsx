@@ -29,7 +29,7 @@ interface StudentUpcomingSession {
   id: string;
   title: string;
   title_arabic?: string | null;
-  scheduled_at: string;
+  start_time: string;
   duration_minutes: number;
   provider: string;
 }
@@ -59,10 +59,10 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
             supabase.from('live_sessions').select('id', { count: 'exact', head: true }).eq('group_id', studentProfile.groupId).eq('status', 'scheduled'),
             supabase
               .from('live_sessions')
-              .select('id, title, title_arabic, scheduled_at, duration_minutes, provider')
+              .select('id, title, title_arabic, start_time, duration_minutes, provider')
               .eq('group_id', studentProfile.groupId)
               .eq('status', 'scheduled')
-              .order('scheduled_at', { ascending: true })
+              .order('start_time', { ascending: true })
               .limit(3),
           ]);
           setCoursesCount(cCount || 0);
@@ -217,7 +217,7 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               ) : (
                 <div className="divide-y divide-slate-100">
                   {upcomingSessions.map((session) => {
-                    const isLive = isSessionLive(session.scheduled_at, session.duration_minutes);
+                    const isLive = isSessionLive(session.start_time, session.duration_minutes);
                     return (
                       <div key={session.id} className="py-3 space-y-2 first:pt-0 last:pb-0">
                         <div className="flex items-start justify-between gap-2">
@@ -232,7 +232,7 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
                               {isRtl ? (session.title_arabic || session.title) : session.title}
                             </h4>
                             <div className="text-[11px] text-slate-500 mt-0.5">
-                              {formatRiyadhDateTime(session.scheduled_at, { locale: isRtl ? 'ar' : 'en' })}
+                              {formatRiyadhDateTime(session.start_time, { locale: isRtl ? 'ar' : 'en' })}
                             </div>
                           </div>
                           <span className="text-[10px] px-2 py-0.5 bg-slate-100 rounded text-slate-600 uppercase font-medium">
