@@ -87,6 +87,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.is_student_assigned_to_course(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_student_assigned_to_course(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.is_student_assigned_to_course(uuid) TO authenticated;
 
 -- Helper 2: Verify teacher course ownership or super_admin access without recursive RLS
@@ -120,6 +121,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.can_manage_course(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.can_manage_course(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.can_manage_course(uuid) TO authenticated;
 
 -- ------------------------------------------------------------------------------

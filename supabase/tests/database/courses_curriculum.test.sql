@@ -5,7 +5,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(46);
+SELECT extensions.plan(52);
 
 -- 1. Deterministic isolated identities
 INSERT INTO auth.users (
@@ -471,58 +471,109 @@ SELECT extensions.is(
   'Student cannot read unpublished draft course'
 );
 
--- Test 39: Enrolled student cannot update or mutate courses table
-SELECT extensions.throws_ok(
-  $$UPDATE public.courses SET title = 'Hacked Title' WHERE id = 'cccccccc-1111-4111-8111-111111111111'$$,
-  '42501',
-  NULL,
-  'Student cannot update courses'
+-- Test 39: Enrolled student UPDATE affects 0 rows due to RLS filter
+WITH attempted_update AS (
+  UPDATE public.courses
+  SET title = 'Hacked Title'
+  WHERE id = 'cccccccc-1111-4111-8111-111111111111'
+  RETURNING id
+)
+SELECT extensions.is(
+  (SELECT count(*)::int FROM attempted_update),
+  0,
+  'Student UPDATE on courses affects 0 rows under RLS'
 );
 
--- Test 40: Enrolled student cannot delete courses
-SELECT extensions.throws_ok(
-  $$DELETE FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'$$,
-  '42501',
-  NULL,
-  'Student cannot delete courses'
+-- Test 40: Course title remains unchanged after student UPDATE attempt
+SELECT extensions.is(
+  (SELECT title FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'),
+  'English Mastery B1',
+  'Course title remains unchanged after student update attempt'
+);
+
+-- Test 41: Enrolled student DELETE affects 0 rows due to RLS filter
+WITH attempted_delete AS (
+  DELETE FROM public.courses
+  WHERE id = 'cccccccc-1111-4111-8111-111111111111'
+  RETURNING id
+)
+SELECT extensions.is(
+  (SELECT count(*)::int FROM attempted_delete),
+  0,
+  'Student DELETE on courses affects 0 rows under RLS'
+);
+
+-- Test 42: Course still exists after student DELETE attempt
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'),
+  1,
+  'Course still exists after student delete attempt'
 );
 
 -- Switch to Unassigned Student
 SELECT set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', true);
 
--- Test 41: Unassigned student cannot read course 1
+-- Test 43: Unassigned student cannot read course 1
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.courses WHERE id = 'cccccccc-1111-4111-8111-111111111111'),
   0,
   'Unassigned student cannot read course 1'
 );
 
--- Test 42: Helper is_student_assigned_to_course returns false for unassigned student
+-- Test 44: Helper is_student_assigned_to_course returns false for unassigned student
 SELECT extensions.is(
   public.is_student_assigned_to_course('cccccccc-1111-4111-8111-111111111111'),
   false,
   'is_student_assigned_to_course returns false for unassigned student'
 );
 
--- Test 43: Helper can_manage_course returns false for student
+-- Test 45: Helper can_manage_course returns false for student
 SELECT extensions.is(
   public.can_manage_course('cccccccc-1111-4111-8111-111111111111'),
   false,
   'can_manage_course returns false for student'
 );
 
+-- Test 46: Authenticated role HAS execute privilege on is_student_assigned_to_course
+SELECT extensions.is(
+  has_function_privilege('authenticated', 'public.is_student_assigned_to_course(uuid)', 'EXECUTE'),
+  true,
+  'authenticated role has EXECUTE on is_student_assigned_to_course'
+);
+
+-- Test 47: Authenticated role HAS execute privilege on can_manage_course
+SELECT extensions.is(
+  has_function_privilege('authenticated', 'public.can_manage_course(uuid)', 'EXECUTE'),
+  true,
+  'authenticated role has EXECUTE on can_manage_course'
+);
+
+-- Test 48: anon role DOES NOT have execute privilege on is_student_assigned_to_course
+SELECT extensions.is(
+  has_function_privilege('anon', 'public.is_student_assigned_to_course(uuid)', 'EXECUTE'),
+  false,
+  'anon role does NOT have EXECUTE on is_student_assigned_to_course'
+);
+
+-- Test 49: anon role DOES NOT have execute privilege on can_manage_course
+SELECT extensions.is(
+  has_function_privilege('anon', 'public.can_manage_course(uuid)', 'EXECUTE'),
+  false,
+  'anon role does NOT have EXECUTE on can_manage_course'
+);
+
 -- Switch to Anon Role
 SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.sub', '', true);
 
--- Test 44: Anon cannot read any courses
+-- Test 50: Anon cannot read any courses
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.courses),
   0,
   'Anon cannot read any courses'
 );
 
--- Test 45: Anon execution of is_student_assigned_to_course is rejected (REVOKE FROM PUBLIC)
+-- Test 51: Anon execution of is_student_assigned_to_course is rejected with 42501
 SELECT extensions.throws_ok(
   $$SELECT public.is_student_assigned_to_course('cccccccc-1111-4111-8111-111111111111')$$,
   '42501',
@@ -530,7 +581,7 @@ SELECT extensions.throws_ok(
   'Anon cannot execute is_student_assigned_to_course helper'
 );
 
--- Test 46: Anon execution of can_manage_course is rejected (REVOKE FROM PUBLIC)
+-- Test 52: Anon execution of can_manage_course is rejected with 42501
 SELECT extensions.throws_ok(
   $$SELECT public.can_manage_course('cccccccc-1111-4111-8111-111111111111')$$,
   '42501',
