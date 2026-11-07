@@ -5,7 +5,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(52);
+SELECT extensions.plan(53);
 
 -- 1. Deterministic isolated identities
 INSERT INTO auth.users (
@@ -566,14 +566,22 @@ SELECT extensions.is(
 SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.sub', '', true);
 
--- Test 50: Anon cannot read any courses
-SELECT extensions.is(
-  (SELECT count(*)::int FROM public.courses),
-  0,
-  'Anon cannot read any courses'
+-- Test 50: Anon SELECT on courses is rejected with 42501 due to revoked table privileges
+SELECT extensions.throws_ok(
+  $$SELECT count(*) FROM public.courses$$,
+  '42501',
+  NULL,
+  'Anon cannot select from courses table'
 );
 
--- Test 51: Anon execution of is_student_assigned_to_course is rejected with 42501
+-- Test 51: anon role DOES NOT have SELECT table privilege on public.courses
+SELECT extensions.is(
+  has_table_privilege('anon', 'public.courses', 'SELECT'),
+  false,
+  'anon role does NOT have SELECT privilege on public.courses'
+);
+
+-- Test 52: Anon execution of is_student_assigned_to_course is rejected with 42501
 SELECT extensions.throws_ok(
   $$SELECT public.is_student_assigned_to_course('cccccccc-1111-4111-8111-111111111111')$$,
   '42501',
@@ -581,7 +589,7 @@ SELECT extensions.throws_ok(
   'Anon cannot execute is_student_assigned_to_course helper'
 );
 
--- Test 52: Anon execution of can_manage_course is rejected with 42501
+-- Test 53: Anon execution of can_manage_course is rejected with 42501
 SELECT extensions.throws_ok(
   $$SELECT public.can_manage_course('cccccccc-1111-4111-8111-111111111111')$$,
   '42501',

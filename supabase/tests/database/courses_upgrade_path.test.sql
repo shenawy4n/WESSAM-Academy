@@ -7,7 +7,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(42);
+SELECT extensions.plan(43);
 
 -- ------------------------------------------------------------------------------
 -- 1. SETUP DETERMINISTIC IDENTITIES
@@ -373,14 +373,22 @@ SELECT extensions.is(
 SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.sub', '', true);
 
--- Test 31: Anon cannot read any courses
-SELECT extensions.is(
-  (SELECT count(*)::int FROM public.courses),
-  0,
-  'Anon cannot read any courses'
+-- Test 31: Anon SELECT on courses is rejected with 42501 due to revoked table privileges
+SELECT extensions.throws_ok(
+  $$SELECT count(*) FROM public.courses$$,
+  '42501',
+  NULL,
+  'Anon cannot select from courses table'
 );
 
--- Test 32: Anon execution of is_student_assigned_to_course throws 42501
+-- Test 32: anon role DOES NOT have SELECT table privilege on public.courses
+SELECT extensions.is(
+  has_table_privilege('anon', 'public.courses', 'SELECT'),
+  false,
+  'anon role does NOT have SELECT privilege on public.courses'
+);
+
+-- Test 33: Anon execution of is_student_assigned_to_course throws 42501
 SELECT extensions.throws_ok(
   $$SELECT public.is_student_assigned_to_course('d1d1d1d1-d1d1-41d1-81d1-d1d1d1d1d1d1')$$,
   '42501',
@@ -388,7 +396,7 @@ SELECT extensions.throws_ok(
   'Anon cannot execute is_student_assigned_to_course'
 );
 
--- Test 33: Anon execution of can_manage_course throws 42501
+-- Test 34: Anon execution of can_manage_course throws 42501
 SELECT extensions.throws_ok(
   $$SELECT public.can_manage_course('d1d1d1d1-d1d1-41d1-81d1-d1d1d1d1d1d1')$$,
   '42501',
@@ -402,7 +410,7 @@ SELECT extensions.throws_ok(
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1', true);
 
--- Test 34: Course owner can reorder course units
+-- Test 35: Course owner can reorder course units
 SELECT extensions.lives_ok(
   $$SELECT public.reorder_course_units(
     'd1d1d1d1-d1d1-41d1-81d1-d1d1d1d1d1d1',
@@ -411,14 +419,14 @@ SELECT extensions.lives_ok(
   'Course owner teacher can reorder units'
 );
 
--- Test 35: Unit order updated
+-- Test 36: Unit order updated
 SELECT extensions.is(
   (SELECT order_index FROM public.course_units WHERE id = 'e2e2e2e2-e2e2-42e2-82e2-e2e2e2e2e2e2'),
   1,
   'Unit e2 order_index is now 1'
 );
 
--- Test 36: Course owner can reorder lessons
+-- Test 37: Course owner can reorder lessons
 SELECT extensions.lives_ok(
   $$SELECT public.reorder_course_lessons(
     'e1e1e1e1-e1e1-41e1-81e1-e1e1e1e1e1e1',
@@ -427,14 +435,14 @@ SELECT extensions.lives_ok(
   'Course owner teacher can reorder lessons'
 );
 
--- Test 37: Lesson order updated
+-- Test 38: Lesson order updated
 SELECT extensions.is(
   (SELECT order_index FROM public.lessons WHERE id = 'f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2'),
   1,
   'Lesson f2 order_index is now 1'
 );
 
--- Test 38: Course owner can assign course to active cohort
+-- Test 39: Course owner can assign course to active cohort
 SELECT extensions.lives_ok(
   $$SELECT public.assign_course_to_group(
     'd3d3d3d3-d3d3-43d3-83d3-d3d3d3d3d3d3',
@@ -443,7 +451,7 @@ SELECT extensions.lives_ok(
   'Course owner can assign course to active group'
 );
 
--- Test 39: Course owner can remove course from group
+-- Test 40: Course owner can remove course from group
 SELECT extensions.lives_ok(
   $$SELECT public.remove_course_from_group(
     'd3d3d3d3-d3d3-43d3-83d3-d3d3d3d3d3d3',
@@ -457,21 +465,21 @@ SELECT extensions.lives_ok(
 -- ------------------------------------------------------------------------------
 SELECT set_config('request.jwt.claim.sub', 'b1b1b1b1-b1b1-41b1-81b1-b1b1b1b1b1b1', true);
 
--- Test 40: Enrolled student can read published lesson
+-- Test 41: Enrolled student can read published lesson
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.lessons WHERE id = 'f1f1f1f1-f1f1-41f1-81f1-f1f1f1f1f1f1'),
   1,
   'Enrolled student can view published lesson'
 );
 
--- Test 41: Enrolled student cannot read unpublished draft lesson
+-- Test 42: Enrolled student cannot read unpublished draft lesson
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.lessons WHERE id = 'f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2'),
   0,
   'Enrolled student cannot view unpublished lesson'
 );
 
--- Test 42: Enrolled student can record lesson progress
+-- Test 43: Enrolled student can record lesson progress
 SELECT extensions.lives_ok(
   $$SELECT public.record_lesson_progress(
     'f1f1f1f1-f1f1-41f1-81f1-f1f1f1f1f1f1',
