@@ -23,6 +23,7 @@ import {
   LiveSessionProvider,
   createLiveSession,
   updateLiveSession,
+  getAuthorizedMeetingLink,
 } from './liveSessionsService';
 import { utcToRiyadhInputs } from '../../lib/dateUtils';
 import { supabase } from '../../lib/supabase/client';
@@ -174,6 +175,17 @@ export const SessionModal: React.FC<SessionModalProps> = ({
       setProvider(sessionToEdit.provider || 'zoom');
       setMeetingUrl(sessionToEdit.meetingUrl || '');
       setTeacherNotes(sessionToEdit.teacherNotes || '');
+
+      // Load authorized meeting URL if not already present
+      if (!sessionToEdit.meetingUrl) {
+        getAuthorizedMeetingLink(sessionToEdit.id)
+          .then((link) => {
+            if (link) setMeetingUrl(link);
+          })
+          .catch((err) => {
+            console.error('Could not fetch meeting link for editing:', err);
+          });
+      }
     } else {
       setTitle('');
       setTitleArabic('');

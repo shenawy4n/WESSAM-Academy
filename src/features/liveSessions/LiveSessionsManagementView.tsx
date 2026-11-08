@@ -35,6 +35,7 @@ import {
   fetchTeacherLiveSessions,
   cancelLiveSession,
   deleteLiveSession,
+  getAuthorizedMeetingLink,
 } from './liveSessionsService';
 import { SessionModal } from './SessionModal';
 import { AttendanceSheetModal } from './AttendanceSheetModal';
@@ -106,14 +107,27 @@ export const LiveSessionsManagementView: React.FC = () => {
     loadSessions();
   }, [timeframe, selectedGroup, selectedStatus, searchQuery]);
 
-  const handleCopyLink = async (id: string, url?: string | null) => {
-    if (!url) return;
+  const handleCopyLink = async (id: string) => {
     try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
+      const link = await getAuthorizedMeetingLink(id);
+      if (link) {
+        await navigator.clipboard.writeText(link);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
+      }
     } catch (err) {
       console.error('Failed to copy meeting link:', err);
+    }
+  };
+
+  const handleLaunchMeeting = async (id: string) => {
+    try {
+      const link = await getAuthorizedMeetingLink(id);
+      if (link) {
+        window.open(link, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      console.error('Failed to open meeting link:', err);
     }
   };
 
@@ -408,11 +422,11 @@ export const LiveSessionsManagementView: React.FC = () => {
 
                   {/* Meeting Launch or Copy Link */}
                   <div className="flex items-center gap-1">
-                    {session.meetingUrl && !isCancelled && (
+                    {!isCancelled && (
                       <>
                         <button
                           type="button"
-                          onClick={() => handleCopyLink(session.id, session.meetingUrl)}
+                          onClick={() => handleCopyLink(session.id)}
                           title={isRtl ? 'نسخ رابط الحصة' : 'Copy link'}
                           className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 transition-colors"
                         >
@@ -423,15 +437,14 @@ export const LiveSessionsManagementView: React.FC = () => {
                           )}
                         </button>
 
-                        <a
-                          href={session.meetingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => handleLaunchMeeting(session.id)}
                           className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-[#356AE6] hover:bg-slate-100 transition-colors"
                           title={isRtl ? 'بدء الحصة / فتح الرابط' : 'Launch classroom'}
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        </button>
                       </>
                     )}
 

@@ -1,12 +1,19 @@
 -- ==============================================================================
--- Integration tests for migration 20261107000008 (Live Sessions & Attendance)
--- Validates schema extensions, RLS isolation, secure meeting links,
--- atomic attendance batching, and cohort enrollment integrity triggers.
+-- Integration tests for migration 20261107000008 & 20261108000009
+-- Phase 4A Live Sessions & Attendance Management Security Hardening
+-- Validates:
+-- 1. Schema structure, functions, and SECURITY DEFINER enforcement
+-- 2. Anonymous access restrictions & column-level privilege protection (meeting_url)
+-- 3. Teacher cross-data isolation for live sessions and attendance
+-- 4. Unowned session boundaries (teacher_id IS NULL: super admin only)
+-- 5. Active vs. inactive student boundaries (RPC link access, view, attendance)
+-- 6. Cohort enrollment validation in triggers and atomic attendance batch RPC
+-- 7. Student attendance read isolation and mutation prevention
 -- ==============================================================================
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(47);
+SELECT extensions.plan(70);
 
 -- -----------------------------------------------------------------------------
 -- 1. Deterministic isolated identities
@@ -20,7 +27,8 @@ INSERT INTO auth.users (
   ('99999999-9999-4999-8999-999999999999', 'authenticated', 'authenticated', 'super_admin_live@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('22222222-2222-4222-8222-222222222222', 'authenticated', 'authenticated', 'student_live1@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('33333333-3333-4333-8333-333333333333', 'authenticated', 'authenticated', 'student_live2@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
-  ('44444444-4444-4444-8444-444444444444', 'authenticated', 'authenticated', 'student_live_unassigned@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now())
+  ('44444444-4444-4444-8444-444444444444', 'authenticated', 'authenticated', 'student_live_unassigned@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('55555555-5555-4555-8555-555555555555', 'authenticated', 'authenticated', 'student_inactive@test.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.profiles (id, role, full_name, full_name_arabic, status)
@@ -30,7 +38,8 @@ VALUES
   ('99999999-9999-4999-8999-999999999999', 'super_admin', 'Live Super Admin', 'مدير النظام العام', 'active'),
   ('22222222-2222-4222-8222-222222222222', 'student', 'Live Student One', 'طالب الحصة الأول', 'active'),
   ('33333333-3333-4333-8333-333333333333', 'student', 'Live Student Two', 'طالب الحصة الثاني', 'active'),
-  ('44444444-4444-4444-8444-444444444444', 'student', 'Unassigned Student', 'طالب غير مسجل بالمجموعة', 'active')
+  ('44444444-4444-4444-8444-444444444444', 'student', 'Unassigned Student', 'طالب غير مسجل بالمجموعة', 'active'),
+  ('55555555-5555-4555-8555-555555555555', 'student', 'Inactive Student', 'طالب غير نشط', 'inactive')
 ON CONFLICT (id) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
@@ -42,11 +51,12 @@ VALUES
   ('aaaaaaaa-2222-4222-8222-222222222222', 'Live Cohort B', 'مجموعة البث ب', 30, true)
 ON CONFLICT (id) DO NOTHING;
 
--- Enroll student 1 and student 2 in Cohort A; student 3 in Cohort B
+-- Enroll student 1, student 2, and inactive student in Cohort A; student 3 in Cohort B
 INSERT INTO public.group_students (student_id, group_id)
 VALUES
   ('22222222-2222-4222-8222-222222222222', 'aaaaaaaa-1111-4111-8111-111111111111'),
   ('33333333-3333-4333-8333-333333333333', 'aaaaaaaa-1111-4111-8111-111111111111'),
+  ('55555555-5555-4555-8555-555555555555', 'aaaaaaaa-1111-4111-8111-111111111111'),
   ('44444444-4444-4444-8444-444444444444', 'aaaaaaaa-2222-4222-8222-222222222222')
 ON CONFLICT (group_id, student_id) DO NOTHING;
 
@@ -58,7 +68,8 @@ INSERT INTO public.live_sessions (
 ) VALUES
   ('bbbbbbbb-1111-4111-8111-111111111111', 'aaaaaaaa-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'Unit 1 Live Grammar Class', 'حصة القواعد المباشرة 1', now() + interval '1 day', 60, 'zoom', 'https://zoom.us/j/1234567890', 'scheduled'),
   ('bbbbbbbb-2222-4222-8222-222222222222', 'aaaaaaaa-2222-4222-8222-222222222222', '88888888-8888-4888-8888-888888888888', 'Cohort B Speaking Session', 'حصة المحادثة للمجموعة ب', now() + interval '2 days', 45, 'google_meet', 'https://meet.google.com/abc-defg-hij', 'scheduled'),
-  ('bbbbbbbb-3333-4333-8333-333333333333', 'aaaaaaaa-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'Cancelled Review Session', 'حصة المراجعة الملغاة', now() - interval '1 day', 60, 'zoom', 'https://zoom.us/j/9999999999', 'cancelled')
+  ('bbbbbbbb-3333-4333-8333-333333333333', 'aaaaaaaa-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'Cancelled Review Session', 'حصة المراجعة الملغاة', now() - interval '1 day', 60, 'zoom', 'https://zoom.us/j/9999999999', 'cancelled'),
+  ('bbbbbbbb-5555-4555-8555-555555555555', 'aaaaaaaa-1111-4111-8111-111111111111', NULL, 'Unowned Global Masterclass', 'حصة غير معينة لمعلم محدد', now() + interval '3 days', 90, 'zoom', 'https://zoom.us/j/unowned555', 'scheduled')
 ON CONFLICT (id) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
@@ -84,7 +95,7 @@ SELECT extensions.is_definer('public', 'get_session_meeting_link', ARRAY['uuid']
 SELECT extensions.is_definer('public', 'record_session_attendance', ARRAY['uuid', 'jsonb'], 'record_session_attendance is SECURITY DEFINER');
 
 -- -----------------------------------------------------------------------------
--- SECTION 2: Anonymous Restrictions
+-- SECTION 2: Anonymous Restrictions & Column Privileges
 -- -----------------------------------------------------------------------------
 -- Tests 14-15: Anonymous table privileges revoked
 SELECT extensions.is(
@@ -129,13 +140,32 @@ SELECT extensions.throws_ok(
   'Anon cannot execute record_session_attendance'
 );
 
+-- Tests 20-22: Column-level privilege protection for meeting_url
+SELECT extensions.is(
+  has_column_privilege('authenticated', 'public.live_sessions', 'meeting_url', 'SELECT'),
+  false,
+  'authenticated role does not have SELECT privilege on meeting_url'
+);
+
+SELECT extensions.is(
+  has_column_privilege('authenticated', 'public.live_sessions', 'title', 'SELECT'),
+  true,
+  'authenticated role has SELECT privilege on title'
+);
+
+SELECT extensions.is(
+  has_column_privilege('authenticated', 'public.live_sessions', 'start_time', 'SELECT'),
+  true,
+  'authenticated role has SELECT privilege on start_time'
+);
+
 -- -----------------------------------------------------------------------------
--- SECTION 3: Teacher Live Sessions RLS & Isolation
+-- SECTION 3: Teacher Live Sessions RLS, Data Isolation & Mutations
 -- -----------------------------------------------------------------------------
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 
--- Test 20: Teacher owner can insert live session
+-- Test 23: Teacher owner can insert live session
 SELECT extensions.lives_ok(
   $$INSERT INTO public.live_sessions (
       id, group_id, teacher_id, title, start_time, duration_minutes, provider, meeting_url, status
@@ -153,7 +183,7 @@ SELECT extensions.lives_ok(
   'Teacher owner can insert a live session for their group'
 );
 
--- Test 21: Teacher owner can update live session
+-- Test 24: Teacher owner can update live session
 SELECT extensions.lives_ok(
   $$UPDATE public.live_sessions
     SET title = 'Updated Title by Owner'
@@ -164,7 +194,14 @@ SELECT extensions.lives_ok(
 -- Switch to other teacher
 SELECT set_config('request.jwt.claim.sub', '88888888-8888-4888-8888-888888888888', true);
 
--- Test 22: Other teacher cannot update owner's session (0 rows modified)
+-- Test 25: Teacher data isolation: other teacher cannot view owner's live sessions
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.live_sessions WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'),
+  0,
+  'Teacher cannot view live sessions belonging to another teacher'
+);
+
+-- Test 26: Other teacher cannot update owner's session (0 rows modified)
 WITH upd AS (
   UPDATE public.live_sessions
   SET title = 'Malicious Hijack'
@@ -177,7 +214,7 @@ SELECT extensions.is(
   'Other teacher cannot update sessions belonging to owner teacher'
 );
 
--- Test 23: Other teacher cannot delete owner's session (0 rows deleted)
+-- Test 27: Other teacher cannot delete owner's session (0 rows deleted)
 WITH del AS (
   DELETE FROM public.live_sessions
   WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'
@@ -189,10 +226,18 @@ SELECT extensions.is(
   'Other teacher cannot delete sessions belonging to owner teacher'
 );
 
+-- Test 28: Other teacher cannot get meeting link for owner's session
+SELECT extensions.throws_ok(
+  $$SELECT public.get_session_meeting_link('bbbbbbbb-1111-4111-8111-111111111111')$$,
+  '42501',
+  NULL,
+  'Other teacher cannot get meeting link for owner session'
+);
+
 -- Switch to super admin
 SELECT set_config('request.jwt.claim.sub', '99999999-9999-4999-8999-999999999999', true);
 
--- Test 24: Super admin can update any session
+-- Test 29: Super admin can update any session
 SELECT extensions.lives_ok(
   $$UPDATE public.live_sessions
     SET title = 'Super Admin Supervised Title'
@@ -200,30 +245,127 @@ SELECT extensions.lives_ok(
   'Super admin can update any live session'
 );
 
+-- Tests 30-32: Super admin can view all sessions regardless of teacher
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.live_sessions WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'),
+  1,
+  'Super admin views owner teacher session'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.live_sessions WHERE id = 'bbbbbbbb-2222-4222-8222-222222222222'),
+  1,
+  'Super admin views other teacher session'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.live_sessions WHERE id = 'bbbbbbbb-5555-4555-8555-555555555555'),
+  1,
+  'Super admin views unowned session'
+);
+
 -- -----------------------------------------------------------------------------
--- SECTION 4: Student Live Sessions RLS & Read Isolation
+-- SECTION 4: Unowned Session Boundaries (teacher_id IS NULL)
 -- -----------------------------------------------------------------------------
--- Switch to enrolled student 1 (in Cohort A)
+-- Switch to Teacher Owner
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+
+-- Test 33: Teacher cannot manage unowned session
+SELECT extensions.is(
+  public.can_manage_live_session('bbbbbbbb-5555-4555-8555-555555555555'),
+  false,
+  'Teacher cannot manage unowned session (teacher_id IS NULL)'
+);
+
+-- Test 34: Teacher cannot retrieve meeting link for unowned session
+SELECT extensions.throws_ok(
+  $$SELECT public.get_session_meeting_link('bbbbbbbb-5555-4555-8555-555555555555')$$,
+  '42501',
+  NULL,
+  'Teacher cannot retrieve meeting link for unowned session'
+);
+
+-- Test 35: Teacher cannot update unowned session (0 rows affected)
+WITH upd AS (
+  UPDATE public.live_sessions
+  SET title = 'Teacher Claims Unowned'
+  WHERE id = 'bbbbbbbb-5555-4555-8555-555555555555'
+  RETURNING id
+)
+SELECT extensions.is(
+  (SELECT count(*)::int FROM upd),
+  0,
+  'Teacher cannot update unowned session'
+);
+
+-- Test 36: Teacher cannot record attendance for unowned session
+SELECT extensions.throws_ok(
+  $$SELECT public.record_session_attendance(
+      'bbbbbbbb-5555-4555-8555-555555555555',
+      jsonb_build_array(
+        jsonb_build_object('student_id', '22222222-2222-4222-8222-222222222222', 'status', 'present')
+      )
+    )$$,
+  '42501',
+  NULL,
+  'Teacher cannot record attendance for unowned session'
+);
+
+-- Switch to super admin
+SELECT set_config('request.jwt.claim.sub', '99999999-9999-4999-8999-999999999999', true);
+
+-- Test 37: Super admin can manage unowned session
+SELECT extensions.is(
+  public.can_manage_live_session('bbbbbbbb-5555-4555-8555-555555555555'),
+  true,
+  'Super admin can manage unowned session'
+);
+
+-- Test 38: Super admin retrieves meeting link for unowned session
+SELECT extensions.is(
+  public.get_session_meeting_link('bbbbbbbb-5555-4555-8555-555555555555'),
+  'https://zoom.us/j/unowned555',
+  'Super admin can retrieve meeting link for unowned session'
+);
+
+-- -----------------------------------------------------------------------------
+-- SECTION 5: Student Live Sessions RLS, Column Protection & Isolation
+-- -----------------------------------------------------------------------------
+-- Switch to enrolled student 1 (in Cohort A, active)
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 
--- Test 25: Enrolled student can view sessions for their assigned cohort A
+-- Test 39: Enrolled student can view sessions for their assigned cohort A
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.live_sessions WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'),
   1,
   'Enrolled student can SELECT live session belonging to their assigned group'
 );
 
--- Test 26: Enrolled student cannot view sessions for cohort B
+-- Test 40: Enrolled student cannot view sessions for cohort B
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.live_sessions WHERE id = 'bbbbbbbb-2222-4222-8222-222222222222'),
   0,
   'Student in Cohort A cannot view sessions belonging to Cohort B'
 );
 
+-- Test 41: Direct SELECT of meeting_url by student throws SQLSTATE 42501
+SELECT extensions.throws_ok(
+  $$SELECT meeting_url FROM public.live_sessions WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'$$,
+  '42501',
+  NULL,
+  'Student cannot directly SELECT meeting_url column'
+);
+
+-- Test 42: Direct SELECT of authorized columns succeeds
+SELECT extensions.lives_ok(
+  $$SELECT id, title, start_time, duration_minutes, provider, status FROM public.live_sessions WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'$$,
+  'Student can SELECT permitted non-sensitive columns'
+);
+
 -- Switch to student in cohort B (unassigned to cohort A)
 SELECT set_config('request.jwt.claim.sub', '44444444-4444-4444-8444-444444444444', true);
 
--- Test 27: Student not in cohort A cannot view session 1
+-- Test 43: Student not in cohort A cannot view session 1
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.live_sessions WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'),
   0,
@@ -233,7 +375,7 @@ SELECT extensions.is(
 -- Switch back to student 1 to test mutations
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 
--- Test 28: Student cannot insert live session
+-- Test 44: Student cannot insert live session
 SELECT extensions.throws_ok(
   $$INSERT INTO public.live_sessions (
       group_id, teacher_id, title, start_time, duration_minutes, provider, meeting_url, status
@@ -252,7 +394,7 @@ SELECT extensions.throws_ok(
   'Student cannot insert live session'
 );
 
--- Test 29: Student cannot update live session (0 rows affected)
+-- Test 45: Student cannot update live session (0 rows affected)
 WITH upd AS (
   UPDATE public.live_sessions
   SET title = 'Hacked by student'
@@ -265,7 +407,7 @@ SELECT extensions.is(
   'Student cannot update live session'
 );
 
--- Test 30: Student cannot delete live session (0 rows affected)
+-- Test 46: Student cannot delete live session (0 rows affected)
 WITH del AS (
   DELETE FROM public.live_sessions
   WHERE id = 'bbbbbbbb-1111-4111-8111-111111111111'
@@ -277,10 +419,38 @@ SELECT extensions.is(
   'Student cannot delete live session'
 );
 
+-- Switch to Inactive Student (5555...)
+SELECT set_config('request.jwt.claim.sub', '55555555-5555-4555-8555-555555555555', true);
+
+-- Test 47: Inactive student cannot view live sessions (0 rows returned)
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.live_sessions WHERE group_id = 'aaaaaaaa-1111-4111-8111-111111111111'),
+  0,
+  'Inactive student cannot view live sessions'
+);
+
+-- Test 48: Inactive student cannot retrieve meeting link via RPC
+SELECT extensions.throws_ok(
+  $$SELECT public.get_session_meeting_link('bbbbbbbb-1111-4111-8111-111111111111')$$,
+  '42501',
+  NULL,
+  'Inactive student is rejected from retrieving meeting link'
+);
+
+-- Switch back to active student 1
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+
+-- Test 49: Cancelled session returns null for student
+SELECT extensions.is(
+  public.get_session_meeting_link('bbbbbbbb-3333-4333-8333-333333333333'),
+  NULL,
+  'Student receives NULL meeting link for cancelled session'
+);
+
 -- -----------------------------------------------------------------------------
--- SECTION 5: Secure Meeting Link Retrieval via RPC
+-- SECTION 6: Secure Meeting Link Retrieval via RPC
 -- -----------------------------------------------------------------------------
--- Test 31: Teacher owner retrieves meeting link
+-- Test 50: Teacher owner retrieves meeting link
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 SELECT extensions.is(
   public.get_session_meeting_link('bbbbbbbb-1111-4111-8111-111111111111'),
@@ -288,7 +458,7 @@ SELECT extensions.is(
   'Teacher owner retrieves meeting link for their session'
 );
 
--- Test 32: Super admin retrieves meeting link
+-- Test 51: Super admin retrieves meeting link
 SELECT set_config('request.jwt.claim.sub', '99999999-9999-4999-8999-999999999999', true);
 SELECT extensions.is(
   public.get_session_meeting_link('bbbbbbbb-1111-4111-8111-111111111111'),
@@ -296,7 +466,7 @@ SELECT extensions.is(
   'Super admin retrieves meeting link for any session'
 );
 
--- Test 33: Enrolled student retrieves meeting link
+-- Test 52: Enrolled student retrieves meeting link
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 SELECT extensions.is(
   public.get_session_meeting_link('bbbbbbbb-1111-4111-8111-111111111111'),
@@ -304,7 +474,7 @@ SELECT extensions.is(
   'Enrolled student retrieves meeting link for their cohort session'
 );
 
--- Test 34: Unassigned student throws 42501
+-- Test 53: Unassigned student throws 42501
 SELECT set_config('request.jwt.claim.sub', '44444444-4444-4444-8444-444444444444', true);
 SELECT extensions.throws_ok(
   $$SELECT public.get_session_meeting_link('bbbbbbbb-1111-4111-8111-111111111111')$$,
@@ -313,21 +483,13 @@ SELECT extensions.throws_ok(
   'Unassigned student is rejected from retrieving meeting link'
 );
 
--- Test 35: Cancelled session returns null for student
-SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
-SELECT extensions.is(
-  public.get_session_meeting_link('bbbbbbbb-3333-4333-8333-333333333333'),
-  NULL,
-  'Student receives NULL meeting link for cancelled session'
-);
-
 -- -----------------------------------------------------------------------------
--- SECTION 6: Atomic Attendance Batch RPC & Trigger Validation
+-- SECTION 7: Atomic Attendance Batch RPC & Trigger Validation
 -- -----------------------------------------------------------------------------
 -- Switch to Teacher Owner
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 
--- Test 36: Teacher records attendance for enrolled students
+-- Test 54: Teacher records attendance for enrolled students
 SELECT extensions.lives_ok(
   $$SELECT public.record_session_attendance(
       'bbbbbbbb-1111-4111-8111-111111111111',
@@ -339,7 +501,7 @@ SELECT extensions.lives_ok(
   'Teacher owner can atomically record attendance for enrolled cohort students'
 );
 
--- Test 37-38: Verification that records exist
+-- Test 55-56: Verification that records exist
 SELECT extensions.is(
   (SELECT status::text FROM public.attendance WHERE session_id = 'bbbbbbbb-1111-4111-8111-111111111111' AND student_id = '22222222-2222-4222-8222-222222222222'),
   'present',
@@ -352,7 +514,7 @@ SELECT extensions.is(
   'Student 2 status is late'
 );
 
--- Test 39-40: Idempotent duplicate update
+-- Test 57-58: Idempotent duplicate update
 SELECT extensions.lives_ok(
   $$SELECT public.record_session_attendance(
       'bbbbbbbb-1111-4111-8111-111111111111',
@@ -369,8 +531,17 @@ SELECT extensions.is(
   'Student 1 status updated to excused'
 );
 
--- Test 41: Other teacher cannot record attendance for owner session
+-- Switch to other teacher
 SELECT set_config('request.jwt.claim.sub', '88888888-8888-4888-8888-888888888888', true);
+
+-- Test 59: Other teacher cannot view owner session attendance (RLS returns 0 rows)
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.attendance WHERE session_id = 'bbbbbbbb-1111-4111-8111-111111111111'),
+  0,
+  'Teacher cannot view attendance records for another teachers session'
+);
+
+-- Test 60: Other teacher cannot record attendance for owner session
 SELECT extensions.throws_ok(
   $$SELECT public.record_session_attendance(
       'bbbbbbbb-1111-4111-8111-111111111111',
@@ -383,8 +554,10 @@ SELECT extensions.throws_ok(
   'Other teacher is forbidden from recording attendance on owner session'
 );
 
--- Test 42: Student cannot record attendance via RPC
+-- Switch to Student 1
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
+
+-- Test 61: Student cannot record attendance via RPC
 SELECT extensions.throws_ok(
   $$SELECT public.record_session_attendance(
       'bbbbbbbb-1111-4111-8111-111111111111',
@@ -397,37 +570,81 @@ SELECT extensions.throws_ok(
   'Student cannot execute record_session_attendance'
 );
 
--- Test 43: Trigger rejects non-enrolled student attendance
+-- Switch back to Teacher Owner
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+
+-- Test 62: Trigger rejects non-enrolled student attendance
 SELECT extensions.throws_ok(
   $$INSERT INTO public.attendance (session_id, student_id, status)
     VALUES ('bbbbbbbb-1111-4111-8111-111111111111', '44444444-4444-4444-8444-444444444444', 'present')$$,
   '22000',
-  'Student is not enrolled in the group assigned to this live session',
+  NULL,
   'Trigger prevents recording attendance for a student not in the session cohort'
 );
 
+-- Test 63: Trigger rejects inactive student attendance
+SELECT extensions.throws_ok(
+  $$INSERT INTO public.attendance (session_id, student_id, status)
+    VALUES ('bbbbbbbb-1111-4111-8111-111111111111', '55555555-5555-4555-8555-555555555555', 'present')$$,
+  '22000',
+  NULL,
+  'Trigger prevents recording attendance for an inactive student'
+);
+
+-- Test 64: RPC record_session_attendance rejects inactive student
+SELECT extensions.throws_ok(
+  $$SELECT public.record_session_attendance(
+      'bbbbbbbb-1111-4111-8111-111111111111',
+      jsonb_build_array(
+        jsonb_build_object('student_id', '55555555-5555-4555-8555-555555555555', 'status', 'present')
+      )
+    )$$,
+  '22000',
+  NULL,
+  'RPC rejects recording attendance for an inactive student'
+);
+
+-- Switch to super admin
+SELECT set_config('request.jwt.claim.sub', '99999999-9999-4999-8999-999999999999', true);
+
+-- Tests 65-66: Super admin can record attendance for unowned session
+SELECT extensions.lives_ok(
+  $$SELECT public.record_session_attendance(
+      'bbbbbbbb-5555-4555-8555-555555555555',
+      jsonb_build_array(
+        jsonb_build_object('student_id', '22222222-2222-4222-8222-222222222222', 'status', 'present')
+      )
+    )$$,
+  'Super admin can record attendance for unowned session'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::int FROM public.attendance WHERE session_id = 'bbbbbbbb-5555-4555-8555-555555555555'),
+  1,
+  'Attendance record for unowned session successfully stored'
+);
+
 -- -----------------------------------------------------------------------------
--- SECTION 7: Student Attendance Visibility & Mutation Prevention
+-- SECTION 8: Student Attendance Visibility & Mutation Prevention
 -- -----------------------------------------------------------------------------
 -- Switch to Student 1
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 
--- Test 44: Student 1 can view their own attendance record
+-- Test 67: Student 1 can view their own attendance record
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.attendance WHERE student_id = '22222222-2222-4222-8222-222222222222'),
-  1,
-  'Student 1 can view their own attendance record'
+  2,
+  'Student 1 can view their own attendance records'
 );
 
--- Test 45: Student 1 cannot view Student 2's attendance record
+-- Test 68: Student 1 cannot view Student 2's attendance record
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.attendance WHERE student_id = '33333333-3333-4333-8333-333333333333'),
   0,
   'Student 1 cannot view Student 2 attendance records'
 );
 
--- Test 46: Student cannot directly insert attendance (throws 42501 or 0 rows)
+-- Test 69: Student cannot directly insert attendance (throws 42501 or RLS violation)
 SELECT extensions.throws_ok(
   $$INSERT INTO public.attendance (session_id, student_id, status)
     VALUES ('bbbbbbbb-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'present')$$,
@@ -436,7 +653,7 @@ SELECT extensions.throws_ok(
   'Student cannot directly insert attendance'
 );
 
--- Test 47: Student cannot directly update attendance (0 rows affected)
+-- Test 70: Student cannot directly update attendance (0 rows affected)
 WITH upd AS (
   UPDATE public.attendance
   SET status = 'present'
