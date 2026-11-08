@@ -64,7 +64,7 @@ export interface LiveSession {
   groupId?: string;
   startTime: string; // ISO timestamptz (Asia/Riyadh context)
   endTime: string;
-  provider: 'zoom' | 'google_meet' | 'custom';
+  provider: 'zoom' | 'google_meet' | 'teams' | 'custom';
   meetingUrl?: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   teacherNotes?: string;

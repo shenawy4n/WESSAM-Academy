@@ -57,7 +57,7 @@ INSERT INTO public.live_sessions (
   id, group_id, teacher_id, title, title_arabic, start_time, duration_minutes, provider, meeting_url, status
 ) VALUES
   ('bbbbbbbb-1111-4111-8111-111111111111', 'aaaaaaaa-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'Unit 1 Live Grammar Class', 'حصة القواعد المباشرة 1', now() + interval '1 day', 60, 'zoom', 'https://zoom.us/j/1234567890', 'scheduled'),
-  ('bbbbbbbb-2222-4222-8222-222222222222', 'aaaaaaaa-2222-4222-8222-222222222222', '88888888-8888-4888-8888-888888888888', 'Cohort B Speaking Session', 'حصة المحادثة للمجموعة ب', now() + interval '2 days', 45, 'meet', 'https://meet.google.com/abc-defg-hij', 'scheduled'),
+  ('bbbbbbbb-2222-4222-8222-222222222222', 'aaaaaaaa-2222-4222-8222-222222222222', '88888888-8888-4888-8888-888888888888', 'Cohort B Speaking Session', 'حصة المحادثة للمجموعة ب', now() + interval '2 days', 45, 'google_meet', 'https://meet.google.com/abc-defg-hij', 'scheduled'),
   ('bbbbbbbb-3333-4333-8333-333333333333', 'aaaaaaaa-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'Cancelled Review Session', 'حصة المراجعة الملغاة', now() - interval '1 day', 60, 'zoom', 'https://zoom.us/j/9999999999', 'cancelled')
 ON CONFLICT (id) DO NOTHING;
 

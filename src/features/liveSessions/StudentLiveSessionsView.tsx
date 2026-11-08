@@ -256,7 +256,7 @@ export const StudentLiveSessionsView: React.FC = () => {
                           </h3>
                         </div>
                         <span className="text-xs px-2.5 py-1 rounded bg-slate-100 font-medium text-slate-600 uppercase">
-                          {session.provider}
+                          {session.provider === 'google_meet' ? 'Google Meet' : session.provider}
                         </span>
                       </div>
 
