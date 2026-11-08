@@ -20,6 +20,8 @@ import { StudentCoursesView } from './features/courses/StudentCoursesView';
 import { LiveSessionsManagementView } from './features/liveSessions/LiveSessionsManagementView';
 import { AttendanceReportsView } from './features/liveSessions/AttendanceReportsView';
 import { StudentLiveSessionsView } from './features/liveSessions/StudentLiveSessionsView';
+import { QuizManagementView } from './features/quizzes/QuizManagementView';
+import { StudentAssessmentsView } from './features/quizzes/StudentAssessmentsView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -167,20 +169,7 @@ function AppContent() {
           );
 
         case 'quizzes':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.quizzesExams}
-              subtitle={isRtl ? 'الاختبارات والتقييمات الدورية' : 'Quizzes, midterms, and examinations'}
-              targetPhase="Phase 5 — Assessments"
-              icon={FileQuestion}
-              description={isRtl ? 'إنشاء الاختبارات المؤقتة مع أخذ لقطة غير قابلة للتغيير للأسئلة عند بدء الطالب للمحاولة.' : 'Timed assessments with question snapshots ensuring integrity even if original questions change.'}
-              plannedCapabilities={[
-                isRtl ? 'لقطات ثابتة للأسئلة عند بدء المحاولة' : 'Immutable question snapshots on attempt start',
-                isRtl ? 'تحديد مدة الاختبار وعدد المحاولات' : 'Configurable duration and attempt limits',
-                isRtl ? 'تصحيح تلقائي فوري وحجب الإجابات حتى الموعد المحدد' : 'Automatic grading with delayed answer release',
-              ]}
-            />
-          );
+          return <QuizManagementView />;
 
         case 'assignments':
           return (
@@ -350,20 +339,7 @@ function AppContent() {
           );
 
         case 'quizzes':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.quizzesExams}
-              subtitle={isRtl ? 'الاختبارات الدورية وتقييمات الفهم' : 'Quizzes & examinations'}
-              targetPhase="Phase 5 — Assessments"
-              icon={FileQuestion}
-              description={isRtl ? 'خوض الاختبارات الإلكترونية المؤقتة والحصول على النتيجة والتقييم.' : 'Take timed online quizzes and check your proficiency scores.'}
-              plannedCapabilities={[
-                isRtl ? 'واجهة اختبار سلسة ومؤقت تنازلي دقيق' : 'Intuitive test interface with countdown timer',
-                isRtl ? 'حفظ تلقائي للإجابات أثناء الحل' : 'Automatic continuous answer saving',
-                isRtl ? 'عرض النتيجة والمراجعة بعد انتهاء التقييم' : 'Review score and explanations once released',
-              ]}
-            />
-          );
+          return <StudentAssessmentsView />;
 
         case 'results':
           return (
