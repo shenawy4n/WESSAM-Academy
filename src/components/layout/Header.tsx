@@ -8,13 +8,21 @@ import { useLocale } from '../../hooks/useLocale';
 import { useAuth, ENABLE_PREVIEW_ROLES } from '../../features/auth/AuthContext';
 import { LanguageSwitcher } from '../shared/LanguageSwitcher';
 import { Menu, Clock, ShieldCheck, UserCheck } from 'lucide-react';
+import { NotificationBell } from '../../features/notifications/NotificationBell';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
   pageTitle: string;
+  onOpenNotifications?: () => void;
+  onNavigateToResource?: (url: string) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, pageTitle }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onToggleSidebar,
+  pageTitle,
+  onOpenNotifications = () => {},
+  onNavigateToResource,
+}) => {
   const { t, isRtl } = useLocale();
   const { role, user, setActiveTestRole } = useAuth();
 
@@ -72,6 +80,12 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, pageTitle }) =>
             </button>
           </div>
         )}
+
+        {/* Notification Bell */}
+        <NotificationBell
+          onOpenCenter={onOpenNotifications}
+          onNavigateToResource={onNavigateToResource}
+        />
 
         {/* Language Switcher */}
         <LanguageSwitcher />

@@ -22,6 +22,8 @@ import { AttendanceReportsView } from './features/liveSessions/AttendanceReports
 import { StudentLiveSessionsView } from './features/liveSessions/StudentLiveSessionsView';
 import { QuizManagementView } from './features/quizzes/QuizManagementView';
 import { StudentAssessmentsView } from './features/quizzes/StudentAssessmentsView';
+import { AnnouncementManagementView } from './features/notifications/AnnouncementManagementView';
+import { NotificationCenterView } from './features/notifications/NotificationCenterView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -54,6 +56,7 @@ function AppContent() {
   const [previewBypass, setPreviewBypass] = useState<boolean>(false);
   const [currentTeacherView, setCurrentTeacherView] = useState<TeacherView>('dashboard');
   const [currentStudentView, setCurrentStudentView] = useState<StudentView>('home');
+  const [teacherNotificationTab, setTeacherNotificationTab] = useState<'announcements' | 'inbox'>('announcements');
 
   // If Supabase environment is missing and user has not clicked inspection mode
   if (!isConfigured && !previewBypass) {
@@ -237,18 +240,43 @@ function AppContent() {
 
         case 'notifications':
           return (
-            <FeaturePlaceholderView
-              title={t.navigation.notifications}
-              subtitle={isRtl ? 'مركز الإشعارات والتنبيهات الموجهة' : 'Academy broadcast and student notification desk'}
-              targetPhase="Phase 6 — Analytics & Finalization"
-              icon={Bell}
-              description={isRtl ? 'إرسال التنبيهات العامة للمجموعات أو التنبيهات الفردية للحصص المباشرة ومواعيد الاختبارات.' : 'Internal notification system for general announcements, cohort broadcasts, and exam reminders.'}
-              plannedCapabilities={[
-                isRtl ? 'إرسال إعلانات عامة للأكاديمية' : 'General academy broadcast announcements',
-                isRtl ? 'إشعارات آلية بمواعيد الحصص المباشرة' : 'Automated live class schedule reminders',
-                isRtl ? 'تتبع قراءة الإشعارات من الطلاب' : 'Read/unread status per recipient',
-              ]}
-            />
+            <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+              <div className="flex bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200">
+                <button
+                  onClick={() => setTeacherNotificationTab('announcements')}
+                  className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+                    teacherNotificationTab === 'announcements'
+                      ? 'bg-white text-[#14243A] shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {isRtl ? 'لوحة إدارة الإعلانات' : 'Announcement Desk'}
+                </button>
+                <button
+                  onClick={() => setTeacherNotificationTab('inbox')}
+                  className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+                    teacherNotificationTab === 'inbox'
+                      ? 'bg-white text-[#356AE6] shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {isRtl ? 'الإشعارات الواردة' : 'Received Alerts'}
+                </button>
+              </div>
+
+              {teacherNotificationTab === 'announcements' ? (
+                <AnnouncementManagementView />
+              ) : (
+                <NotificationCenterView
+                  onNavigateToResource={(url) => {
+                    if (url.includes('/courses')) setCurrentTeacherView('courses');
+                    else if (url.includes('/live-sessions')) setCurrentTeacherView('live-sessions');
+                    else if (url.includes('/assessments')) setCurrentTeacherView('quizzes');
+                    else if (url.includes('/students')) setCurrentTeacherView('students');
+                  }}
+                />
+              )}
+            </div>
           );
 
         case 'settings':
@@ -359,17 +387,12 @@ function AppContent() {
 
         case 'notifications':
           return (
-            <FeaturePlaceholderView
-              title={t.navigation.notifications}
-              subtitle={isRtl ? 'تنبيهات الأكاديمية وإعلانات الأستاذ' : 'Academy notifications'}
-              targetPhase="Phase 6 — Analytics & Finalization"
-              icon={Bell}
-              description={isRtl ? 'التنبيهات الخاصة بمواعيد الحصص المباشرة والواجبات الجديدة وإعلانات الأكاديمية.' : 'Important updates about live sessions, new assignments, and academy notices.'}
-              plannedCapabilities={[
-                isRtl ? 'إشعارات فورية بالواجبات الجديدة' : 'Instant alerts for newly published coursework',
-                isRtl ? 'تنبيه قبل بدء الحصة المباشرة' : 'Reminders prior to live class starts',
-                isRtl ? 'إشعار عند رصد درجات جديدة' : 'Notification upon assignment grading',
-              ]}
+            <NotificationCenterView
+              onNavigateToResource={(url) => {
+                if (url.includes('/courses')) setCurrentStudentView('courses');
+                else if (url.includes('/live-sessions')) setCurrentStudentView('live-sessions');
+                else if (url.includes('/assessments')) setCurrentStudentView('quizzes');
+              }}
             />
           );
 
