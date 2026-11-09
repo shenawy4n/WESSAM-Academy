@@ -261,6 +261,49 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
             </CardContent>
           </Card>
 
+          {/* Recorded Video Library Widget */}
+          <Card>
+            <CardHeader
+              title={t.navigation.videoLibrary}
+              subtitle={isRtl ? 'المحاضرات والشروحات المسجلة' : 'Recorded lectures & explanations'}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigate('video')}
+                  icon={<PlayCircle className="w-3.5 h-3.5" />}
+                >
+                  {isRtl ? 'فتح المكتبة' : 'Open Library'}
+                </Button>
+              }
+            />
+            <CardContent>
+              <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#356AE6] text-white flex items-center justify-center shrink-0">
+                    <Video className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-900">
+                      {isRtl ? 'متابعة المشاهدة' : 'Continue Watching'}
+                    </h5>
+                    <p className="text-[11px] text-slate-500">
+                      {isRtl ? 'استكمل محاضراتك المسجلة وحافظ على تقدمك' : 'Resume recorded lectures and track your progress'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => onNavigate('video')}
+                  className="text-xs shrink-0"
+                >
+                  {isRtl ? 'مشاهدة' : 'Watch'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Recent Results */}
           <Card>
             <CardHeader

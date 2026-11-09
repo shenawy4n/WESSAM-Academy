@@ -27,6 +27,7 @@ export type StudentView =
   | 'home'
   | 'courses'
   | 'lessons'
+  | 'video'
   | 'live-sessions'
   | 'assignments'
   | 'quizzes'

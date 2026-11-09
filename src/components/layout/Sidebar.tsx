@@ -71,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'home' as StudentView, label: t.navigation.home, icon: Home },
     { id: 'courses' as StudentView, label: t.navigation.myCourses, icon: BookOpen },
     { id: 'lessons' as StudentView, label: t.navigation.lessons, icon: PlayCircle },
+    { id: 'video' as StudentView, label: t.navigation.videoLibrary, icon: Video },
     { id: 'live-sessions' as StudentView, label: t.navigation.liveClasses, icon: Radio },
     { id: 'assignments' as StudentView, label: t.navigation.assignments, icon: ClipboardList },
     { id: 'quizzes' as StudentView, label: t.navigation.quizzesExams, icon: FileQuestion },

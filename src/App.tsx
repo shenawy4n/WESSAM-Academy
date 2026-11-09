@@ -24,6 +24,8 @@ import { QuizManagementView } from './features/quizzes/QuizManagementView';
 import { StudentAssessmentsView } from './features/quizzes/StudentAssessmentsView';
 import { AnnouncementManagementView } from './features/notifications/AnnouncementManagementView';
 import { NotificationCenterView } from './features/notifications/NotificationCenterView';
+import { TeacherVideoLibraryView } from './features/videoLibrary/TeacherVideoLibraryView';
+import { StudentVideoLibraryView } from './features/videoLibrary/StudentVideoLibraryView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -134,20 +136,7 @@ function AppContent() {
           return <CoursesManagementView />;
 
         case 'video':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.videoLibrary}
-              subtitle={isRtl ? 'مكتبة الفيديوهات التعليمية المسجلة' : 'Recorded lecture library'}
-              targetPhase="Phase 3 — Courses & Learning"
-              icon={Video}
-              description={isRtl ? 'إدارة الفيديوهات المسجلة عبر المزود السحابي مع روابط تشغيل موثقة ومحمية بسيرفر الموقع.' : 'Video provider abstraction (prepared for Mux) with signed server-side playback authorization.'}
-              plannedCapabilities={[
-                isRtl ? 'تخزين بيانات الفيديو وروابط التشغيل الموقعة' : 'Signed URL playback tokens without client secrets',
-                isRtl ? 'التحقق من أحقية الطالب قبل إصدار رمز المشاهدة' : 'Server authorization verification before streaming',
-                isRtl ? 'تتبع فترات المشاهدة والإكمال' : 'Playback engagement and progress logging',
-              ]}
-            />
-          );
+          return <TeacherVideoLibraryView />;
 
         case 'live-sessions':
           return <LiveSessionsManagementView />;
@@ -321,6 +310,8 @@ function AppContent() {
           return t.navigation.myCourses;
         case 'lessons':
           return t.navigation.lessons;
+        case 'video':
+          return t.navigation.videoLibrary;
         case 'live-sessions':
           return t.navigation.liveClasses;
         case 'assignments':
@@ -346,6 +337,13 @@ function AppContent() {
         case 'courses':
         case 'lessons':
           return <StudentCoursesView />;
+
+        case 'video':
+          return (
+            <StudentVideoLibraryView
+              onNavigateToLesson={() => setCurrentStudentView('lessons')}
+            />
+          );
 
         case 'live-sessions':
           return <StudentLiveSessionsView />;
