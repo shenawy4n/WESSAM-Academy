@@ -124,7 +124,7 @@ export async function fetchTeacherVideos(filters?: VideoFilter): Promise<VideoAs
       *,
       course:courses(id, title, title_arabic),
       unit:course_units(id, title, title_arabic),
-      lesson:lessons(id, title, title_arabic),
+      lesson:lessons!video_assets_lesson_id_fkey(id, title, title_arabic),
       group:groups(id, name, name_arabic)
     `)
     .order('order_index', { ascending: true })
@@ -419,7 +419,7 @@ export async function fetchStudentVideos(filters?: VideoFilter): Promise<VideoAs
       *,
       course:courses(id, title, title_arabic),
       unit:course_units(id, title, title_arabic),
-      lesson:lessons(id, title, title_arabic),
+      lesson:lessons!video_assets_lesson_id_fkey(id, title, title_arabic),
       group:groups(id, name, name_arabic),
       progress:video_progress(*)
     `)

@@ -14,6 +14,7 @@ import {
   Edit2,
   Save,
   BookOpen,
+  Library,
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
@@ -21,6 +22,7 @@ import { Input } from '../../components/ui/Input';
 import { useLocale } from '../../hooks/useLocale';
 import { QuestionItem, QuestionType, UpsertQuestionParams } from './types';
 import { fetchQuizById, saveQuizQuestion, deleteQuizQuestion } from './quizService';
+import { QuestionBankPickerModal } from '../questionBank/QuestionBankPickerModal';
 
 interface QuizQuestionBuilderModalProps {
   isOpen: boolean;
@@ -58,6 +60,7 @@ export const QuizQuestionBuilderModal: React.FC<QuizQuestionBuilderModalProps> =
     { optionText: '', optionTextArabic: '', isCorrect: true, orderIndex: 1 },
     { optionText: '', optionTextArabic: '', isCorrect: false, orderIndex: 2 },
   ]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   const loadQuestions = async () => {
     try {
@@ -245,20 +248,32 @@ export const QuizQuestionBuilderModal: React.FC<QuizQuestionBuilderModalProps> =
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-h-[80vh] overflow-y-auto p-1">
         {/* Left: Questions List (4 cols) */}
         <div className="lg:col-span-5 border-b lg:border-b-0 lg:border-e border-slate-200 pe-0 lg:pe-4 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-slate-800">
               {isRtl ? `الأسئلة الحالية (${questions.length})` : `Quiz Questions (${questions.length})`}
             </h3>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={resetForm}
-              className="text-xs"
-            >
-              <Plus className="w-3.5 h-3.5 me-1 text-[#356AE6]" />
-              {isRtl ? 'سؤال جديد' : 'New Question'}
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setIsPickerOpen(true)}
+                className="text-xs text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+              >
+                <Library className="w-3.5 h-3.5 me-1 text-emerald-600" />
+                {isRtl ? 'من بنك الأسئلة' : 'From Bank'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={resetForm}
+                className="text-xs"
+              >
+                <Plus className="w-3.5 h-3.5 me-1 text-[#356AE6]" />
+                {isRtl ? 'سؤال جديد' : 'New Question'}
+              </Button>
+            </div>
           </div>
 
           {loading ? (
@@ -551,6 +566,16 @@ export const QuizQuestionBuilderModal: React.FC<QuizQuestionBuilderModalProps> =
           </form>
         </div>
       </div>
+
+      <QuestionBankPickerModal
+        isOpen={isPickerOpen}
+        onClose={() => setIsPickerOpen(false)}
+        quizId={quizId}
+        onSuccess={async () => {
+          await loadQuestions();
+          if (onQuestionsUpdated) onQuestionsUpdated();
+        }}
+      />
     </Modal>
   );
 };

@@ -26,6 +26,7 @@ import { AnnouncementManagementView } from './features/notifications/Announcemen
 import { NotificationCenterView } from './features/notifications/NotificationCenterView';
 import { TeacherVideoLibraryView } from './features/videoLibrary/TeacherVideoLibraryView';
 import { StudentVideoLibraryView } from './features/videoLibrary/StudentVideoLibraryView';
+import { QuestionBankView } from './features/questionBank/QuestionBankView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -145,20 +146,7 @@ function AppContent() {
           return <AttendanceReportsView />;
 
         case 'question-bank':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.questionBank}
-              subtitle={isRtl ? 'بنك أسئلة اللغة الإنجليزية وقواعدها' : 'English question bank & grammar repository'}
-              targetPhase="Phase 5 — Assessments"
-              icon={HelpCircle}
-              description={isRtl ? 'بنك شامل لأسئلة القواعد، المفردات، الفهم، والاستماع لتكوين الاختبارات.' : 'Comprehensive repository for grammar, vocabulary, reading, and listening questions.'}
-              plannedCapabilities={[
-                isRtl ? 'دعم الأسئلة متعددة الاختيارات، صح/خطأ، إعادة الترتيب وإكمال الفراغ' : 'Multiple Choice, True/False, Fill in Blank, Sentence Ordering',
-                isRtl ? 'تصنيف الأسئلة حسب المهارة ومستوى الصعوبة' : 'Categorize by skill, topic, and difficulty',
-                isRtl ? 'توليد اختبارات عشوائية من البنك' : 'Dynamic question selection from bank',
-              ]}
-            />
-          );
+          return <QuestionBankView />;
 
         case 'quizzes':
           return <QuizManagementView />;
