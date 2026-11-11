@@ -174,43 +174,48 @@ export const QuestionBankView: React.FC = () => {
     itemData: Partial<QuestionBankItem>,
     options: QuestionOptionItem[]
   ) => {
-    if (editingItem) {
-      await updateQuestionBankItem({
-        id: editingItem.id,
-        question_text: itemData.question_text || '',
-        question_text_arabic: itemData.question_text_arabic,
-        question_type: itemData.question_type || 'multiple_choice',
-        difficulty: itemData.difficulty || 'medium',
-        points: itemData.points || 1,
-        explanation: itemData.explanation,
-        course_id: itemData.course_id,
-        unit_id: itemData.unit_id,
-        lesson_id: itemData.lesson_id,
-        topic: itemData.topic,
-        tags: itemData.tags,
-        time_limit_seconds: itemData.time_limit_seconds,
-        options,
-      });
-      setAlertNotice({ type: 'success', message: 'تم تحديث السؤال بنجاح' });
-    } else {
-      await createQuestionBankItem({
-        question_text: itemData.question_text || '',
-        question_text_arabic: itemData.question_text_arabic,
-        question_type: itemData.question_type || 'multiple_choice',
-        difficulty: itemData.difficulty || 'medium',
-        points: itemData.points || 1,
-        explanation: itemData.explanation,
-        course_id: itemData.course_id,
-        unit_id: itemData.unit_id,
-        lesson_id: itemData.lesson_id,
-        topic: itemData.topic,
-        tags: itemData.tags,
-        time_limit_seconds: itemData.time_limit_seconds,
-        options,
-      });
-      setAlertNotice({ type: 'success', message: 'تمت إضافة السؤال لبنك الأسئلة بنجاح' });
+    try {
+      if (editingItem) {
+        await updateQuestionBankItem({
+          id: editingItem.id,
+          question_text: itemData.question_text || '',
+          question_text_arabic: itemData.question_text_arabic,
+          question_type: itemData.question_type || 'multiple_choice',
+          difficulty: itemData.difficulty || 'medium',
+          points: itemData.points || 1,
+          explanation: itemData.explanation,
+          course_id: itemData.course_id,
+          unit_id: itemData.unit_id,
+          lesson_id: itemData.lesson_id,
+          topic: itemData.topic,
+          tags: itemData.tags,
+          time_limit_seconds: itemData.time_limit_seconds,
+          options,
+        });
+        setAlertNotice({ type: 'success', message: 'تم تحديث السؤال بنجاح' });
+      } else {
+        await createQuestionBankItem({
+          question_text: itemData.question_text || '',
+          question_text_arabic: itemData.question_text_arabic,
+          question_type: itemData.question_type || 'multiple_choice',
+          difficulty: itemData.difficulty || 'medium',
+          points: itemData.points || 1,
+          explanation: itemData.explanation,
+          course_id: itemData.course_id,
+          unit_id: itemData.unit_id,
+          lesson_id: itemData.lesson_id,
+          topic: itemData.topic,
+          tags: itemData.tags,
+          time_limit_seconds: itemData.time_limit_seconds,
+          options,
+        });
+        setAlertNotice({ type: 'success', message: 'تمت إضافة السؤال لبنك الأسئلة بنجاح' });
+      }
+      await loadData();
+    } catch (err: any) {
+      setAlertNotice({ type: 'error', message: err.message || 'فشل في حفظ السؤال' });
+      throw err;
     }
-    await loadData();
   };
 
   const handleDuplicate = async (questionId: string) => {
@@ -269,12 +274,26 @@ export const QuestionBankView: React.FC = () => {
   const handleCommitImport = async (
     rows: { item: Partial<QuestionBankItem>; options: QuestionOptionItem[] }[]
   ) => {
-    const res = await importQuestions(rows);
-    setAlertNotice({
-      type: 'success',
-      message: `تم استيراد ${res.successCount} سؤال بنجاح إلى بنك الأسئلة`,
-    });
-    await loadData();
+    try {
+      const res = await importQuestions(rows);
+      if (res.errors && res.errors.length > 0) {
+        setAlertNotice({
+          type: 'error',
+          message: `فشل الاستيراد: ${res.errors.join(', ')}`,
+        });
+      } else {
+        setAlertNotice({
+          type: 'success',
+          message: `تم استيراد ${res.successCount} سؤال بنجاح إلى بنك الأسئلة`,
+        });
+        await loadData();
+      }
+    } catch (err: any) {
+      setAlertNotice({
+        type: 'error',
+        message: err.message || 'فشل في استيراد الأسئلة',
+      });
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Check, AlertCircle, HelpCircle } from 'lucide-react';
 import {
   QuestionBankItem,
@@ -16,6 +16,33 @@ interface QuestionEditorModalProps {
   courses: { id: string; title: string; title_arabic?: string | null }[];
 }
 
+const getDefaultOptionsForType = (type: QuestionType): QuestionOptionItem[] => {
+  if (type === 'multiple_choice' || type === 'multiple_select') {
+    return [
+      { option_text: '', is_correct: true, order_index: 0 },
+      { option_text: '', is_correct: false, order_index: 1 },
+      { option_text: '', is_correct: false, order_index: 2 },
+      { option_text: '', is_correct: false, order_index: 3 },
+    ];
+  }
+  if (type === 'true_false') {
+    return [
+      { option_text: 'True', option_text_arabic: 'صح', is_correct: true, order_index: 0 },
+      { option_text: 'False', option_text_arabic: 'خطأ', is_correct: false, order_index: 1 },
+    ];
+  }
+  if (type === 'matching') {
+    return [
+      { option_text: '', target_match_text: '', is_correct: true, order_index: 0 },
+      { option_text: '', target_match_text: '', is_correct: true, order_index: 1 },
+    ];
+  }
+  if (type === 'short_answer' || type === 'fill_in_the_blank') {
+    return [{ option_text: '', is_correct: true, order_index: 0 }];
+  }
+  return [];
+};
+
 export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
   isOpen,
   onClose,
@@ -23,8 +50,6 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
   initialItem,
   courses,
 }) => {
-  if (!isOpen) return null;
-
   const [questionText, setQuestionText] = useState(initialItem?.question_text || '');
   const [questionTextArabic, setQuestionTextArabic] = useState(initialItem?.question_text_arabic || '');
   const [questionType, setQuestionType] = useState<QuestionType>(initialItem?.question_type || 'multiple_choice');
@@ -35,41 +60,39 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
   const [topic, setTopic] = useState<string>(initialItem?.topic || '');
   const [tagsInput, setTagsInput] = useState<string>((initialItem?.tags || []).join(', '));
   const [explanation, setExplanation] = useState<string>(initialItem?.explanation || '');
-
-  // Options state
   const [options, setOptions] = useState<QuestionOptionItem[]>(() => {
     if (initialItem?.options && initialItem.options.length > 0) {
       return initialItem.options;
     }
-    // Default options by type
-    if (questionType === 'multiple_choice') {
-      return [
-        { option_text: '', is_correct: true, order_index: 0 },
-        { option_text: '', is_correct: false, order_index: 1 },
-        { option_text: '', is_correct: false, order_index: 2 },
-        { option_text: '', is_correct: false, order_index: 3 },
-      ];
-    }
-    if (questionType === 'true_false') {
-      return [
-        { option_text: 'True', option_text_arabic: 'صح', is_correct: true, order_index: 0 },
-        { option_text: 'False', option_text_arabic: 'خطأ', is_correct: false, order_index: 1 },
-      ];
-    }
-    if (questionType === 'matching') {
-      return [
-        { option_text: '', target_match_text: '', is_correct: true, order_index: 0 },
-        { option_text: '', target_match_text: '', is_correct: true, order_index: 1 },
-      ];
-    }
-    if (questionType === 'short_answer' || questionType === 'fill_in_the_blank') {
-      return [{ option_text: '', is_correct: true, order_index: 0 }];
-    }
-    return [];
+    return getDefaultOptionsForType(initialItem?.question_type || 'multiple_choice');
   });
 
   const [saving, setSaving] = useState(false);
   const [clientErrors, setClientErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setQuestionText(initialItem?.question_text || '');
+      setQuestionTextArabic(initialItem?.question_text_arabic || '');
+      const currentType = initialItem?.question_type || 'multiple_choice';
+      setQuestionType(currentType);
+      setDifficulty(initialItem?.difficulty || 'medium');
+      setPoints(initialItem?.points !== undefined ? initialItem.points : 2);
+      setTimeLimitSeconds(initialItem?.time_limit_seconds || '');
+      setCourseId(initialItem?.course_id || '');
+      setTopic(initialItem?.topic || '');
+      setTagsInput((initialItem?.tags || []).join(', '));
+      setExplanation(initialItem?.explanation || '');
+      setClientErrors([]);
+      setSaving(false);
+
+      if (initialItem?.options && initialItem.options.length > 0) {
+        setOptions(initialItem.options);
+      } else {
+        setOptions(getDefaultOptionsForType(currentType));
+      }
+    }
+  }, [isOpen, initialItem]);
 
   // When question type changes, initialize appropriate options if empty/mismatched
   const handleTypeChange = (newType: QuestionType) => {
@@ -181,6 +204,8 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
       setSaving(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">

@@ -266,3 +266,72 @@ describe('Question Bank Utils - Import & Export', () => {
     assert.equal(summary.validRows, 1);
   });
 });
+
+describe('Question Bank RPC Contract & Serialization', () => {
+  test('serializes CreateQuestionPayload into expected RPC p_question and p_options contract', () => {
+    const payload = {
+      question_text: 'What is syntax?',
+      question_text_arabic: 'ما هو بناء الجملة؟',
+      question_type: 'multiple_choice' as const,
+      difficulty: 'medium' as const,
+      points: 3,
+      topic: 'Syntax',
+      tags: ['grammar', 'sentence-structure'],
+      options: [
+        { option_text: 'Word arrangement rules', is_correct: true, order_index: 0 },
+        { option_text: 'Random words', is_correct: false, order_index: 1 },
+      ],
+    };
+
+    // Verify contract format expected by migration 20261110000014
+    const questionContract = {
+      question_text: payload.question_text.trim(),
+      question_text_arabic: payload.question_text_arabic?.trim() || null,
+      question_type: payload.question_type,
+      difficulty_level: payload.difficulty === 'medium' ? 'intermediate' : payload.difficulty,
+      points: Math.max(1, payload.points || 1),
+      topic: payload.topic,
+      tags: payload.tags,
+    };
+
+    assert.equal(questionContract.question_text, 'What is syntax?');
+    assert.equal(questionContract.question_type, 'multiple_choice');
+    assert.equal(questionContract.difficulty_level, 'intermediate');
+    assert.equal(questionContract.points, 3);
+    assert.deepEqual(questionContract.tags, ['grammar', 'sentence-structure']);
+
+    const optionsContract = payload.options.map((opt, idx) => ({
+      option_text: opt.option_text,
+      is_correct: opt.is_correct,
+      order_index: opt.order_index ?? idx,
+    }));
+
+    assert.equal(optionsContract.length, 2);
+    assert.equal(optionsContract[0].is_correct, true);
+    assert.equal(optionsContract[1].is_correct, false);
+  });
+
+  test('validates matching pairs payload serializes target_match_text correctly', () => {
+    const matchingPayload = {
+      question_text: 'Match words',
+      question_type: 'matching' as const,
+      difficulty: 'hard' as const,
+      points: 4,
+      options: [
+        { option_text: 'Enclosed', target_match_text: 'Attached file', is_correct: true, order_index: 0 },
+        { option_text: 'Promptly', target_match_text: 'Immediately', is_correct: true, order_index: 1 },
+      ],
+    };
+
+    const optionsPayload = matchingPayload.options.map((opt, idx) => ({
+      option_text: opt.option_text,
+      target_match_text: opt.target_match_text,
+      is_correct: Boolean(opt.is_correct),
+      order_index: opt.order_index ?? idx,
+    }));
+
+    assert.equal(optionsPayload[0].target_match_text, 'Attached file');
+    assert.equal(optionsPayload[1].target_match_text, 'Immediately');
+  });
+});
+

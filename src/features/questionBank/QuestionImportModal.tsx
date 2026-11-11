@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Upload,
@@ -30,13 +30,20 @@ export const QuestionImportModal: React.FC<QuestionImportModalProps> = ({
   onClose,
   onCommitImport,
 }) => {
-  if (!isOpen) return null;
-
   const [activeTab, setActiveTab] = useState<'csv' | 'json'>('csv');
   const [inputText, setInputText] = useState('');
   const [summary, setSummary] = useState<ImportValidationSummary | null>(null);
   const [committing, setCommitting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setInputText('');
+      setSummary(null);
+      setCommitError(null);
+      setCommitting(false);
+    }
+  }, [isOpen]);
 
   const handleDownloadTemplate = (type: 'csv' | 'json') => {
     const content =
@@ -111,6 +118,8 @@ export const QuestionImportModal: React.FC<QuestionImportModalProps> = ({
       setCommitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">

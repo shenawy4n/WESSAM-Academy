@@ -28,186 +28,86 @@ export interface UpdateQuestionPayload extends CreateQuestionPayload {
   id: string;
 }
 
-// In-memory fallback items for dev/preview when Supabase connection or table is freshly provisioned
-let fallbackQuestionBank: QuestionBankItem[] = [
-  {
-    id: 'demo-q-1',
-    teacher_id: 'demo-teacher',
-    course_id: null,
-    unit_id: null,
-    lesson_id: null,
-    question_text: 'Which sentence uses the present perfect continuous tense correctly?',
-    question_text_arabic: 'أي الجمل الآتية تستخدم زمن المضارع التام المستمر بشكل صحيح؟',
-    question_type: 'multiple_choice',
-    difficulty: 'medium',
-    points: 2,
-    explanation: 'The present perfect continuous is formed with have/has been + present participle (-ing).',
-    topic: 'Tenses',
-    tags: ['grammar', 'tenses', 'present-perfect'],
-    time_limit_seconds: 60,
-    is_active: true,
-    archived_at: null,
-    metadata: {},
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    options: [
-      { id: 'opt-1-1', question_id: 'demo-q-1', option_text: 'She has been studying English for three hours.', is_correct: true, order_index: 0 },
-      { id: 'opt-1-2', question_id: 'demo-q-1', option_text: 'She is been studying English since three hours.', is_correct: false, order_index: 1 },
-      { id: 'opt-1-3', question_id: 'demo-q-1', option_text: 'She has study English for three hours.', is_correct: false, order_index: 2 },
-      { id: 'opt-1-4', question_id: 'demo-q-1', option_text: 'She had studying English three hours ago.', is_correct: false, order_index: 3 },
-    ],
-  },
-  {
-    id: 'demo-q-2',
-    teacher_id: 'demo-teacher',
-    course_id: null,
-    unit_id: null,
-    lesson_id: null,
-    question_text: 'Select all words that can function as relative pronouns:',
-    question_text_arabic: 'اختر جميع الكلمات التي يمكن أن تعمل كضمائر وصل:',
-    question_type: 'multiple_select',
-    difficulty: 'medium',
-    points: 3,
-    explanation: '"Who", "which", and "that" are relative pronouns.',
-    topic: 'Pronouns',
-    tags: ['grammar', 'relative-clauses'],
-    time_limit_seconds: 90,
-    is_active: true,
-    archived_at: null,
-    metadata: {},
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    options: [
-      { id: 'opt-2-1', question_id: 'demo-q-2', option_text: 'who', is_correct: true, order_index: 0 },
-      { id: 'opt-2-2', question_id: 'demo-q-2', option_text: 'which', is_correct: true, order_index: 1 },
-      { id: 'opt-2-3', question_id: 'demo-q-2', option_text: 'that', is_correct: true, order_index: 2 },
-      { id: 'opt-2-4', question_id: 'demo-q-2', option_text: 'slowly', is_correct: false, order_index: 3 },
-    ],
-  },
-  {
-    id: 'demo-q-3',
-    teacher_id: 'demo-teacher',
-    course_id: null,
-    unit_id: null,
-    lesson_id: null,
-    question_text: 'Adjectives in English always precede plural nouns.',
-    question_text_arabic: 'تأتي الصفات في اللغة الإنجليزية دائماً قبل الأسماء في صيغة الجمع.',
-    question_type: 'true_false',
-    difficulty: 'easy',
-    points: 1,
-    explanation: 'Adjectives can also follow linking verbs (predicate adjectives), e.g., "The books are heavy".',
-    topic: 'Adjectives',
-    tags: ['syntax', 'adjectives'],
-    time_limit_seconds: 45,
-    is_active: true,
-    archived_at: null,
-    metadata: {},
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    updated_at: new Date(Date.now() - 86400000).toISOString(),
-    options: [
-      { id: 'opt-3-1', question_id: 'demo-q-3', option_text: 'True', option_text_arabic: 'صح', is_correct: false, order_index: 0 },
-      { id: 'opt-3-2', question_id: 'demo-q-3', option_text: 'False', option_text_arabic: 'خطأ', is_correct: true, order_index: 1 },
-    ],
-  },
-  {
-    id: 'demo-q-4',
-    teacher_id: 'demo-teacher',
-    course_id: null,
-    unit_id: null,
-    lesson_id: null,
-    question_text: 'Match the formal business expressions with their standard meanings:',
-    question_text_arabic: 'صل بين تعابير الأعمال الرسمية ومعانيها القياسية:',
-    question_type: 'matching',
-    difficulty: 'hard',
-    points: 4,
-    explanation: 'Business communication phrases used in professional emails.',
-    topic: 'Business English',
-    tags: ['business', 'vocabulary'],
-    time_limit_seconds: 120,
-    is_active: true,
-    archived_at: null,
-    metadata: {},
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    options: [
-      { id: 'opt-4-1', question_id: 'demo-q-4', option_text: 'Please find attached', target_match_text: 'The document is enclosed with this message', is_correct: true, order_index: 0 },
-      { id: 'opt-4-2', question_id: 'demo-q-4', option_text: 'At your earliest convenience', target_match_text: 'As soon as possible without pressure', is_correct: true, order_index: 1 },
-      { id: 'opt-4-3', question_id: 'demo-q-4', option_text: 'Keep me in the loop', target_match_text: 'Keep me informed about progress', is_correct: true, order_index: 2 },
-    ],
-  },
-];
-
 /**
- * Fetch all question bank items accessible to the current user
+ * Normalizes difficulty level string from DB representation to UI representation.
  */
-export async function fetchQuestionBankItems(includeArchived = false): Promise<QuestionBankItem[]> {
-  if (!supabase) {
-    return includeArchived
-      ? fallbackQuestionBank
-      : fallbackQuestionBank.filter((q) => q.is_active);
-  }
-
-  try {
-    let query = supabase
-      .from('question_bank')
-      .select(`
-        *,
-        course:courses(id, title, title_arabic),
-        options:question_options(*)
-      `)
-      .order('created_at', { ascending: false });
-
-    if (!includeArchived) {
-      query = query.eq('is_active', true);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.warn('Supabase query error for question_bank, falling back to local dataset:', error.message);
-      return includeArchived
-        ? fallbackQuestionBank
-        : fallbackQuestionBank.filter((q) => q.is_active);
-    }
-
-    if (data && data.length > 0) {
-      // Sort options by order_index
-      return data.map((item: any) => ({
-        ...item,
-        options: (item.options || []).sort((a: any, b: any) => a.order_index - b.order_index),
-      }));
-    }
-
-    return includeArchived
-      ? fallbackQuestionBank
-      : fallbackQuestionBank.filter((q) => q.is_active);
-  } catch (err: any) {
-    console.warn('fetchQuestionBankItems catch fallback:', err);
-    return includeArchived
-      ? fallbackQuestionBank
-      : fallbackQuestionBank.filter((q) => q.is_active);
-  }
+function normalizeDifficulty(diff: string | null | undefined): DifficultyLevel {
+  if (!diff) return 'medium';
+  const lower = diff.toLowerCase();
+  if (lower === 'easy') return 'easy';
+  if (lower === 'hard' || lower === 'advanced') return 'hard';
+  return 'medium';
 }
 
 /**
- * Fetch aggregated statistics for question bank
+ * Converts UI difficulty to DB difficulty level value.
  */
-export async function fetchQuestionBankStats(): Promise<QuestionBankStats> {
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.rpc('get_question_bank_stats');
-      if (!error && data) {
-        return data as QuestionBankStats;
-      }
-    } catch (e) {
-      // fallback
-    }
+function toDbDifficulty(diff: DifficultyLevel): string {
+  if (diff === 'medium') return 'intermediate';
+  if (diff === 'hard') return 'advanced';
+  return 'easy';
+}
+
+function ensureClient() {
+  if (!supabase) {
+    throw new Error('Supabase client is not initialized');
+  }
+  return supabase;
+}
+
+/**
+ * Fetch all question bank items accessible to the current user.
+ * Strictly queries the backend without mock fallbacks.
+ * Returns empty array [] if no questions exist.
+ */
+export async function fetchQuestionBankItems(includeArchived = false): Promise<QuestionBankItem[]> {
+  const client = ensureClient();
+
+  let query = client
+    .from('question_bank')
+    .select(`
+      *,
+      course:courses(id, title, title_arabic),
+      options:question_options(*)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (!includeArchived) {
+    query = query.eq('is_active', true);
   }
 
-  // Fallback calculation
-  const total = fallbackQuestionBank.length;
-  const active = fallbackQuestionBank.filter((q) => q.is_active).length;
-  const archived = total - active;
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to fetch questions: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
+    return [];
+  }
+
+  return data.map((item: any) => ({
+    ...item,
+    difficulty: normalizeDifficulty(item.difficulty_level || item.difficulty),
+    options: (item.options || []).sort(
+      (a: QuestionOptionItem, b: QuestionOptionItem) => (a.order_index ?? 0) - (b.order_index ?? 0)
+    ),
+  }));
+}
+
+/**
+ * Fetch aggregated statistics for question bank via RPC.
+ * Throws backend error if RPC fails.
+ */
+export async function fetchQuestionBankStats(): Promise<QuestionBankStats> {
+  const client = ensureClient();
+
+  const { data, error } = await client.rpc('get_question_bank_stats');
+  if (error) {
+    throw new Error(`Failed to fetch question bank stats: ${error.message}`);
+  }
+
+  const raw = data || {};
   const by_type: Record<QuestionType, number> = {
     multiple_choice: 0,
     multiple_select: 0,
@@ -216,317 +116,253 @@ export async function fetchQuestionBankStats(): Promise<QuestionBankStats> {
     essay: 0,
     fill_in_the_blank: 0,
     matching: 0,
+    ...(raw.by_type || {}),
   };
+
+  const rawByDiff = raw.by_difficulty || {};
   const by_difficulty: Record<DifficultyLevel, number> = {
-    easy: 0,
-    medium: 0,
-    hard: 0,
+    easy: Number(rawByDiff.easy || 0),
+    medium: Number(rawByDiff.intermediate || rawByDiff.medium || 0),
+    hard: Number(rawByDiff.advanced || rawByDiff.hard || 0),
   };
 
-  fallbackQuestionBank.forEach((q) => {
-    if (by_type[q.question_type] !== undefined) by_type[q.question_type]++;
-    if (by_difficulty[q.difficulty] !== undefined) by_difficulty[q.difficulty]++;
-  });
-
-  return { total, active, archived, by_type, by_difficulty };
+  return {
+    total: Number(raw.total_questions ?? raw.total ?? 0),
+    active: Number(raw.active_questions ?? raw.active ?? 0),
+    archived: Number(raw.archived_questions ?? raw.archived ?? 0),
+    by_type,
+    by_difficulty,
+  };
 }
 
 /**
- * Create a new question with its options atomically via RPC or client fallback
+ * Create a new question with its options atomically via RPC.
+ * Strictly calls create_question_bank_item with p_question & p_options JSONB payloads.
  */
 export async function createQuestionBankItem(payload: CreateQuestionPayload): Promise<string> {
-  const optionsPayload = (payload.options || []).map((opt, idx) => ({
-    option_text: opt.option_text,
-    option_text_arabic: opt.option_text_arabic || null,
-    is_correct: Boolean(opt.is_correct),
-    order_index: opt.order_index !== undefined ? opt.order_index : idx,
-    explanation: opt.explanation || null,
-    target_match_text: opt.target_match_text || null,
-    target_match_arabic: opt.target_match_arabic || null,
-    metadata: opt.metadata || {},
-  }));
+  const client = ensureClient();
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.rpc('create_question_bank_item', {
-        p_question_text: payload.question_text,
-        p_question_text_arabic: payload.question_text_arabic || null,
-        p_question_type: payload.question_type,
-        p_difficulty: payload.difficulty,
-        p_points: payload.points,
-        p_explanation: payload.explanation || null,
-        p_course_id: payload.course_id || null,
-        p_unit_id: payload.unit_id || null,
-        p_lesson_id: payload.lesson_id || null,
-        p_topic: payload.topic || null,
-        p_tags: payload.tags || [],
-        p_time_limit_seconds: payload.time_limit_seconds || null,
-        p_metadata: payload.metadata || {},
-        p_options: optionsPayload,
-      });
-
-      if (error) {
-        console.warn('create_question_bank_item RPC failed, using local mock store:', error.message);
-      } else if (data) {
-        return data;
-      }
-    } catch (err) {
-      console.warn('createQuestionBankItem exception:', err);
-    }
-  }
-
-  // Local fallback
-  const newId = `demo-q-${Date.now()}`;
-  const newItem: QuestionBankItem = {
-    id: newId,
-    teacher_id: 'demo-teacher',
+  const questionPayload = {
+    question_text: payload.question_text.trim(),
+    question_text_arabic: payload.question_text_arabic?.trim() || null,
+    question_type: payload.question_type,
+    difficulty_level: toDbDifficulty(payload.difficulty),
+    points: Math.max(1, payload.points || 1),
+    explanation: payload.explanation?.trim() || null,
     course_id: payload.course_id || null,
     unit_id: payload.unit_id || null,
     lesson_id: payload.lesson_id || null,
-    question_text: payload.question_text,
-    question_text_arabic: payload.question_text_arabic || null,
-    question_type: payload.question_type,
-    difficulty: payload.difficulty,
-    points: payload.points,
-    explanation: payload.explanation || null,
-    topic: payload.topic || null,
+    topic: payload.topic?.trim() || null,
     tags: payload.tags || [],
     time_limit_seconds: payload.time_limit_seconds || null,
-    is_active: true,
-    archived_at: null,
     metadata: payload.metadata || {},
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    options: optionsPayload.map((opt, i) => ({
-      ...opt,
-      id: `opt-${newId}-${i}`,
-      question_id: newId,
-    })),
   };
-  fallbackQuestionBank.unshift(newItem);
-  return newId;
-}
 
-/**
- * Update an existing question and its options atomically via RPC
- */
-export async function updateQuestionBankItem(payload: UpdateQuestionPayload): Promise<void> {
   const optionsPayload = (payload.options || []).map((opt, idx) => ({
-    option_text: opt.option_text,
-    option_text_arabic: opt.option_text_arabic || null,
+    option_text: opt.option_text.trim(),
+    option_text_arabic: opt.option_text_arabic?.trim() || null,
     is_correct: Boolean(opt.is_correct),
     order_index: opt.order_index !== undefined ? opt.order_index : idx,
-    explanation: opt.explanation || null,
-    target_match_text: opt.target_match_text || null,
-    target_match_arabic: opt.target_match_arabic || null,
+    explanation: opt.explanation?.trim() || null,
+    target_match_text: opt.target_match_text?.trim() || null,
+    target_match_arabic: opt.target_match_arabic?.trim() || null,
     metadata: opt.metadata || {},
   }));
 
-  if (supabase) {
-    try {
-      const { error } = await supabase.rpc('update_question_bank_item', {
-        p_question_id: payload.id,
-        p_question_text: payload.question_text,
-        p_question_text_arabic: payload.question_text_arabic || null,
-        p_question_type: payload.question_type,
-        p_difficulty: payload.difficulty,
-        p_points: payload.points,
-        p_explanation: payload.explanation || null,
-        p_course_id: payload.course_id || null,
-        p_unit_id: payload.unit_id || null,
-        p_lesson_id: payload.lesson_id || null,
-        p_topic: payload.topic || null,
-        p_tags: payload.tags || [],
-        p_time_limit_seconds: payload.time_limit_seconds || null,
-        p_metadata: payload.metadata || {},
-        p_options: optionsPayload,
-      });
+  const { data, error } = await client.rpc('create_question_bank_item', {
+    p_question: questionPayload,
+    p_options: optionsPayload,
+  });
 
-      if (error) {
-        console.warn('update_question_bank_item RPC failed:', error.message);
-      } else {
-        return;
-      }
-    } catch (err) {
-      console.warn('updateQuestionBankItem exception:', err);
-    }
+  if (error) {
+    throw new Error(error.message);
   }
 
-  // Local fallback
-  const idx = fallbackQuestionBank.findIndex((q) => q.id === payload.id);
-  if (idx !== -1) {
-    fallbackQuestionBank[idx] = {
-      ...fallbackQuestionBank[idx],
-      ...payload,
-      updated_at: new Date().toISOString(),
-      options: optionsPayload.map((opt, i) => ({
-        ...opt,
-        id: `opt-${payload.id}-${i}`,
-        question_id: payload.id,
-      })),
-    };
+  if (!data || !data.id) {
+    throw new Error('Failed to create question: Server returned empty response');
+  }
+
+  return data.id as string;
+}
+
+/**
+ * Update an existing question and its options atomically via RPC.
+ * Strictly calls update_question_bank_item with p_question_id, p_question, p_options.
+ */
+export async function updateQuestionBankItem(payload: UpdateQuestionPayload): Promise<void> {
+  const client = ensureClient();
+
+  const questionPayload = {
+    question_text: payload.question_text.trim(),
+    question_text_arabic: payload.question_text_arabic?.trim() || null,
+    question_type: payload.question_type,
+    difficulty_level: toDbDifficulty(payload.difficulty),
+    points: Math.max(1, payload.points || 1),
+    explanation: payload.explanation?.trim() || null,
+    course_id: payload.course_id || null,
+    unit_id: payload.unit_id || null,
+    lesson_id: payload.lesson_id || null,
+    topic: payload.topic?.trim() || null,
+    tags: payload.tags || [],
+    time_limit_seconds: payload.time_limit_seconds || null,
+    metadata: payload.metadata || {},
+  };
+
+  const optionsPayload = (payload.options || []).map((opt, idx) => ({
+    option_text: opt.option_text.trim(),
+    option_text_arabic: opt.option_text_arabic?.trim() || null,
+    is_correct: Boolean(opt.is_correct),
+    order_index: opt.order_index !== undefined ? opt.order_index : idx,
+    explanation: opt.explanation?.trim() || null,
+    target_match_text: opt.target_match_text?.trim() || null,
+    target_match_arabic: opt.target_match_arabic?.trim() || null,
+    metadata: opt.metadata || {},
+  }));
+
+  const { error } = await client.rpc('update_question_bank_item', {
+    p_question_id: payload.id,
+    p_question: questionPayload,
+    p_options: optionsPayload,
+  });
+
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
 /**
- * Duplicate a question item creating an independent copy with (Copy) title
+ * Duplicate a question item creating an independent copy with (Copy) title via RPC.
  */
 export async function duplicateQuestionBankItem(questionId: string): Promise<string> {
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.rpc('duplicate_question_bank_item', {
-        p_question_id: questionId,
-      });
+  const client = ensureClient();
 
-      if (!error && data) {
-        return data;
-      }
-    } catch (err) {
-      console.warn('duplicateQuestionBankItem exception:', err);
-    }
+  const { data, error } = await client.rpc('duplicate_question_bank_item', {
+    p_question_id: questionId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
   }
 
-  // Local fallback
-  const existing = fallbackQuestionBank.find((q) => q.id === questionId);
-  if (!existing) throw new Error('Question not found');
+  const newId = data?.new_question_id;
+  if (!newId) {
+    throw new Error('Server did not return the new question identifier');
+  }
 
-  const newId = `demo-q-${Date.now()}`;
-  const copy: QuestionBankItem = {
-    ...existing,
-    id: newId,
-    question_text: `${existing.question_text} (Copy)`,
-    question_text_arabic: existing.question_text_arabic
-      ? `${existing.question_text_arabic} (نسخة)`
-      : null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    options: (existing.options || []).map((o, i) => ({
-      ...o,
-      id: `opt-${newId}-${i}`,
-      question_id: newId,
-    })),
-  };
-  fallbackQuestionBank.unshift(copy);
-  return newId;
+  return newId as string;
 }
 
 /**
- * Bulk archive question items
+ * Bulk archive question items via RPC.
  */
 export async function archiveQuestionBankItems(questionIds: string[]): Promise<number> {
   if (questionIds.length === 0) return 0;
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.rpc('archive_question_bank_items', {
-        p_question_ids: questionIds,
-      });
+  const client = ensureClient();
 
-      if (!error && data !== null) {
-        return Number(data);
-      }
-    } catch (err) {
-      console.warn('archiveQuestionBankItems exception:', err);
-    }
+  const { data, error } = await client.rpc('archive_question_bank_items', {
+    p_question_ids: questionIds,
+  });
+
+  if (error) {
+    throw new Error(error.message);
   }
 
-  // Local fallback
-  let count = 0;
-  fallbackQuestionBank = fallbackQuestionBank.map((q) => {
-    if (questionIds.includes(q.id)) {
-      count++;
-      return { ...q, is_active: false, archived_at: new Date().toISOString() };
-    }
-    return q;
-  });
-  return count;
+  return Number(data?.archived_count ?? 0);
 }
 
 /**
- * Bulk restore question items
+ * Bulk restore question items via RPC.
  */
 export async function restoreQuestionBankItems(questionIds: string[]): Promise<number> {
   if (questionIds.length === 0) return 0;
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.rpc('restore_question_bank_items', {
-        p_question_ids: questionIds,
-      });
+  const client = ensureClient();
 
-      if (!error && data !== null) {
-        return Number(data);
-      }
-    } catch (err) {
-      console.warn('restoreQuestionBankItems exception:', err);
-    }
+  const { data, error } = await client.rpc('restore_question_bank_items', {
+    p_question_ids: questionIds,
+  });
+
+  if (error) {
+    throw new Error(error.message);
   }
 
-  // Local fallback
-  let count = 0;
-  fallbackQuestionBank = fallbackQuestionBank.map((q) => {
-    if (questionIds.includes(q.id)) {
-      count++;
-      return { ...q, is_active: true, archived_at: null };
-    }
-    return q;
-  });
-  return count;
+  return Number(data?.restored_count ?? 0);
 }
 
 /**
- * Import a validated list of questions atomically
+ * Import a validated list of questions atomically using the import_question_bank_items RPC.
+ * Rolls back completely if any row fails validation or insertion.
  */
 export async function importQuestions(
   parsedRows: { item: Partial<QuestionBankItem>; options: QuestionOptionItem[] }[]
 ): Promise<{ successCount: number; errors: string[] }> {
-  let successCount = 0;
-  const errors: string[] = [];
-
-  for (const row of parsedRows) {
-    try {
-      await createQuestionBankItem({
-        question_text: row.item.question_text || '',
-        question_text_arabic: row.item.question_text_arabic || null,
-        question_type: row.item.question_type || 'multiple_choice',
-        difficulty: row.item.difficulty || 'medium',
-        points: row.item.points !== undefined ? Number(row.item.points) : 1,
-        explanation: row.item.explanation || null,
-        course_id: row.item.course_id || null,
-        topic: row.item.topic || null,
-        tags: row.item.tags || [],
-        options: row.options || [],
-      });
-      successCount++;
-    } catch (err: any) {
-      errors.push(`Row error: ${err.message || 'Unknown import error'}`);
-    }
+  if (parsedRows.length === 0) {
+    return { successCount: 0, errors: [] };
   }
 
-  return { successCount, errors };
+  const client = ensureClient();
+
+  const itemsPayload = parsedRows.map((row) => ({
+    question: {
+      question_text: row.item.question_text?.trim() || '',
+      question_text_arabic: row.item.question_text_arabic?.trim() || null,
+      question_type: row.item.question_type || 'multiple_choice',
+      difficulty_level: toDbDifficulty(row.item.difficulty || 'medium'),
+      points: Math.max(1, Number(row.item.points) || 1),
+      explanation: row.item.explanation?.trim() || null,
+      course_id: row.item.course_id || null,
+      unit_id: row.item.unit_id || null,
+      lesson_id: row.item.lesson_id || null,
+      topic: row.item.topic?.trim() || null,
+      tags: row.item.tags || [],
+      time_limit_seconds: row.item.time_limit_seconds || null,
+    },
+    options: (row.options || []).map((opt, idx) => ({
+      option_text: opt.option_text.trim(),
+      option_text_arabic: opt.option_text_arabic?.trim() || null,
+      is_correct: Boolean(opt.is_correct),
+      order_index: opt.order_index !== undefined ? opt.order_index : idx,
+      target_match_text: opt.target_match_text?.trim() || null,
+      target_match_arabic: opt.target_match_arabic?.trim() || null,
+    })),
+  }));
+
+  const { data, error } = await client.rpc('import_question_bank_items', {
+    p_items: itemsPayload,
+  });
+
+  if (error) {
+    return {
+      successCount: 0,
+      errors: [error.message],
+    };
+  }
+
+  return {
+    successCount: Number(data?.imported_count ?? itemsPayload.length),
+    errors: [],
+  };
 }
 
 /**
- * Add bank questions to a quiz with recalculation of quiz total points
+ * Add bank questions to a quiz with recalculation of quiz total points via RPC.
  */
 export async function addBankQuestionsToQuiz(
   quizId: string,
-  questionIds: string[]
+  questionIds: string[],
+  defaultPoints = 5
 ): Promise<number> {
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.rpc('add_bank_questions_to_quiz', {
-        p_quiz_id: quizId,
-        p_question_bank_ids: questionIds,
-      });
+  if (questionIds.length === 0) return 0;
+  const client = ensureClient();
 
-      if (!error && data !== null) {
-        return Number(data);
-      }
-      throw new Error(error?.message || 'Failed to add questions to quiz');
-    } catch (err: any) {
-      console.error('addBankQuestionsToQuiz error:', err);
-      throw err;
-    }
+  const { data, error } = await client.rpc('add_bank_questions_to_quiz', {
+    p_quiz_id: quizId,
+    p_question_ids: questionIds,
+    p_default_points: defaultPoints,
+  });
+
+  if (error) {
+    throw new Error(error.message);
   }
 
-  return questionIds.length;
+  return Number(data?.added_count ?? 0);
 }

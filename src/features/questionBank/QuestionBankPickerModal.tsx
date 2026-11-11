@@ -26,9 +26,7 @@ export const QuestionBankPickerModal: React.FC<QuestionBankPickerModalProps> = (
   quizId,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<QuestionBankItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
@@ -40,8 +38,15 @@ export const QuestionBankPickerModal: React.FC<QuestionBankPickerModalProps> = (
   const [diffFilter, setDiffFilter] = useState<DifficultyLevel | 'all'>('all');
 
   useEffect(() => {
+    if (!isOpen) {
+      setSelectedIds(new Set());
+      setError(null);
+      return;
+    }
+
     async function loadQuestions() {
       setLoading(true);
+      setError(null);
       try {
         const data = await fetchQuestionBankItems(false);
         setItems(data);
@@ -52,7 +57,7 @@ export const QuestionBankPickerModal: React.FC<QuestionBankPickerModalProps> = (
       }
     }
     loadQuestions();
-  }, []);
+  }, [isOpen]);
 
   const filteredItems = filterQuestions(
     items,
@@ -96,6 +101,8 @@ export const QuestionBankPickerModal: React.FC<QuestionBankPickerModalProps> = (
       setSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
