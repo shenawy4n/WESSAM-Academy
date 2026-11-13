@@ -27,6 +27,8 @@ import { NotificationCenterView } from './features/notifications/NotificationCen
 import { TeacherVideoLibraryView } from './features/videoLibrary/TeacherVideoLibraryView';
 import { StudentVideoLibraryView } from './features/videoLibrary/StudentVideoLibraryView';
 import { QuestionBankView } from './features/questionBank/QuestionBankView';
+import { TeacherAssignmentsView } from './features/assignments/TeacherAssignmentsView';
+import { StudentAssignmentsView } from './features/assignments/StudentAssignmentsView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -152,36 +154,10 @@ function AppContent() {
           return <QuizManagementView />;
 
         case 'assignments':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.assignments}
-              subtitle={isRtl ? 'الواجبات والتطبيقات المنزلية' : 'Coursework and homework tasks'}
-              targetPhase="Phase 5 — Assessments"
-              icon={ClipboardList}
-              description={isRtl ? 'تكليف الطلاب بالواجبات مع تحديد مواعيد التسليم ورفع الملفات والتوجيهات.' : 'Homework assignment desk with deadlines, instructions, and file submissions.'}
-              plannedCapabilities={[
-                isRtl ? 'تحديد مواعيد التسليم النهائية بدقة' : 'Enforce precise due dates and late flags',
-                isRtl ? 'إرفاق نماذج وتوجيهات الحل' : 'Attach assignment guidelines and rubrics',
-                isRtl ? 'تعيين الواجب لمجموعة أو لطلاب محددين' : 'Target groups or individual students',
-              ]}
-            />
-          );
+          return <TeacherAssignmentsView initialTab="all" />;
 
         case 'submissions':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.submissionsGrading}
-              subtitle={isRtl ? 'مركز التدقيق وتصحيح أعمال الطلاب' : 'Grading and submission evaluation desk'}
-              targetPhase="Phase 5 — Assessments"
-              icon={CheckSquare}
-              description={isRtl ? 'مراجعة حلول الطلاب، رصد الدرجات، وكتابة الملاحظات التعليمية والتوجيهات.' : 'Review student submissions, award scores, and provide teacher feedback.'}
-              plannedCapabilities={[
-                isRtl ? 'استعراض ملفات وحلول الطلاب' : 'View student answers and submitted files',
-                isRtl ? 'رصد الدرجات وإرسال الملاحظات الفردية' : 'Input scores and individualized teacher feedback',
-                isRtl ? 'إشعار الطالب فور اعتماد النتيجة' : 'Instant notification to student upon review',
-              ]}
-            />
-          );
+          return <TeacherAssignmentsView initialTab="grading" />;
 
         case 'results':
           return (
@@ -337,20 +313,7 @@ function AppContent() {
           return <StudentLiveSessionsView />;
 
         case 'assignments':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.assignments}
-              subtitle={isRtl ? 'الواجبات والتطبيقات العملية' : 'Homework and assignments'}
-              targetPhase="Phase 5 — Assessments"
-              icon={ClipboardList}
-              description={isRtl ? 'رفع الواجبات ومتابعة مواعيد التسليم النهائية وملاحظات الأستاذ وسام.' : 'Submit homework, monitor deadlines, and receive teacher feedback.'}
-              plannedCapabilities={[
-                isRtl ? 'رفع الملفات والحلول بسهولة' : 'Upload assignment response files and text',
-                isRtl ? 'متابعة حالة التسليم (في الموعد / متأخر)' : 'Track on-time or late submission status',
-                isRtl ? 'قراءة توجيهات وملاحظات الأستاذ وسام' : 'Review personalized teacher corrections',
-              ]}
-            />
-          );
+          return <StudentAssignmentsView />;
 
         case 'quizzes':
           return <StudentAssessmentsView />;
