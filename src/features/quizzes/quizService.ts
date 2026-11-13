@@ -17,7 +17,7 @@ import {
   QuizAttemptRecord,
   AttemptReviewData,
 } from './types';
-import { resolveAssessmentStatus } from './quizScoring';
+import { normalizeQuestionSnapshot, resolveAssessmentStatus } from './quizScoring';
 
 const SERVICE = 'quizService';
 
@@ -858,7 +858,7 @@ export async function startQuizAttempt(quizId: string): Promise<{
     startedAt: data.started_at,
     expiresAt: data.expires_at,
     timeLimitSeconds: data.time_limit_seconds,
-    questionSnapshot: data.question_snapshot,
+    questionSnapshot: normalizeQuestionSnapshot(data.question_snapshot),
     isRestored: !!data.is_restored,
   };
 }
@@ -1067,7 +1067,7 @@ export async function fetchQuizSubmissions(quizId: string): Promise<QuizAttemptR
     teacherFeedback: r.teacher_feedback,
     gradedAt: r.graded_at,
     gradedBy: r.graded_by,
-    questionSnapshot: r.question_snapshot || [],
+    questionSnapshot: normalizeQuestionSnapshot(r.question_snapshot),
     studentName: r.profiles?.full_name || 'Student',
     studentNameArabic: r.profiles?.full_name_arabic || r.profiles?.full_name || 'طالب',
     studentNumber: r.profiles?.student_id_number,

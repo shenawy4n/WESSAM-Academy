@@ -247,11 +247,11 @@ export const QuizRunnerModal: React.FC<QuizRunnerModalProps> = ({
             {/* Options for Multiple Choice & True/False */}
             {(currentQ.questionType === 'multiple_choice' || currentQ.questionType === 'true_false') && (
               <div className="space-y-2.5 pt-2">
-                {currentQ.options.map((option) => {
+                {(currentQ.options || []).map((option, optIdx) => {
                   const isSelected = selectedAnswers[currentQ.id]?.optionId === option.id;
                   return (
                     <label
-                      key={option.id}
+                      key={option.id || `${currentQ.id}_opt_${optIdx}`}
                       onClick={() => handleSelectOption(currentQ.id, option.id)}
                       className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
                         isSelected
@@ -306,7 +306,7 @@ export const QuizRunnerModal: React.FC<QuizRunnerModalProps> = ({
               const isCurrent = idx === currentIndex;
               return (
                 <button
-                  key={q.id}
+                  key={q.id || `question_${idx}`}
                   type="button"
                   onClick={() => setCurrentIndex(idx)}
                   className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${

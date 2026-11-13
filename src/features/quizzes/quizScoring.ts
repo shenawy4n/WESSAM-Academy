@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AssessmentStatus, QuestionType } from './types';
+import { AssessmentStatus, QuestionItem, QuestionOption, QuestionType } from './types';
 
 export interface ObjectiveGradingInput {
   questionType: QuestionType;
@@ -16,6 +16,44 @@ export interface ObjectiveGradingResult {
   isCorrect: boolean | null;
   pointsAwarded: number;
   needsReview: boolean;
+}
+
+/**
+ * Normalizes a quiz_attempts.question_snapshot JSONB payload (which may use snake_case
+ * keys from PostgreSQL RPCs such as question_id / question_text / option_text or camelCase
+ * keys) into typed QuestionItem[] with guaranteed unique IDs and numeric orderIndex sorting.
+ */
+export function normalizeQuestionSnapshot(rawSnapshot: unknown): QuestionItem[] {
+  if (!Array.isArray(rawSnapshot)) return [];
+
+  return rawSnapshot
+    .map((item: any, idx: number): QuestionItem => {
+      const id = String(item?.id ?? item?.question_id ?? `question_${idx}`);
+      const rawOptions = Array.isArray(item?.options) ? item.options : [];
+
+      const options: QuestionOption[] = rawOptions
+        .map((opt: any, optIdx: number): QuestionOption => ({
+          id: String(opt?.id ?? `${id}_opt_${optIdx}`),
+          questionId: opt?.questionId ?? opt?.question_id ?? id,
+          optionText: String(opt?.optionText ?? opt?.option_text ?? ''),
+          optionTextArabic: opt?.optionTextArabic ?? opt?.option_text_arabic ?? null,
+          isCorrect: opt?.isCorrect ?? opt?.is_correct,
+          orderIndex: Number(opt?.orderIndex ?? opt?.order_index ?? optIdx + 1),
+        }))
+        .sort((a: QuestionOption, b: QuestionOption) => a.orderIndex - b.orderIndex);
+
+      return {
+        id,
+        questionText: String(item?.questionText ?? item?.question_text ?? ''),
+        questionTextArabic: item?.questionTextArabic ?? item?.question_text_arabic ?? null,
+        questionType: (item?.questionType ?? item?.question_type ?? 'multiple_choice') as QuestionType,
+        points: Number(item?.points ?? 1),
+        orderIndex: Number(item?.orderIndex ?? item?.order_index ?? idx + 1),
+        isRequired: item?.isRequired ?? item?.is_required ?? true,
+        options,
+      };
+    })
+    .sort((a: QuestionItem, b: QuestionItem) => a.orderIndex - b.orderIndex);
 }
 
 /**
