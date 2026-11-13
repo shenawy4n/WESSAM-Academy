@@ -21,7 +21,7 @@ import { Input } from '../../components/ui/Input';
 import { useLocale } from '../../hooks/useLocale';
 import { QuizRecord, CreateQuizParams } from './types';
 import { createQuiz, updateQuiz } from './quizService';
-import { supabase } from '../../lib/supabase/client';
+import { getErrorMessage, requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 
 interface QuizModalProps {
   isOpen: boolean;
@@ -67,39 +67,27 @@ export const QuizModal: React.FC<QuizModalProps> = ({
     if (!isOpen) return;
 
     async function loadOptions() {
-      if (!supabase) {
-        setGroups([
-          { id: 'aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc', name: 'Group A - Intensive IELTS Prep', nameArabic: 'المجموعة أ - الإعداد المكثف للآيلتس' },
-        ]);
-        setCourses([
-          { id: 'cccccccc-1111-4111-8111-111111111111', title: 'IELTS Academic Writing & Speaking Mastery', titleArabic: 'إتقان الكتابة والمحادثة الأكاديمية لاختبار الآيلتس' },
-          { id: 'cccccccc-2222-4222-8222-222222222222', title: 'English Grammar Foundations & Sentence Structure', titleArabic: 'أساسيات قواعد اللغة الإنجليزية وبناء الجملة السليمة' },
-        ]);
-        return;
-      }
-
       try {
-        const [{ data: gList }, { data: cList }, { data: lList }] = await Promise.all([
-          supabase.from('groups').select('id, name, name_arabic').eq('is_active', true).order('name'),
-          supabase.from('courses').select('id, title, title_arabic').order('title'),
-          supabase.from('lessons').select('id, course_id, title, title_arabic').order('order_index'),
+        const client = requireSupabaseClient({ service: 'QuizModal', operation: 'loadOptions' });
+        const [gRes, cRes, lRes] = await Promise.all([
+          client.from('groups').select('id, name, name_arabic').eq('is_active', true).order('name'),
+          client.from('courses').select('id, title, title_arabic').order('title'),
+          client.from('lessons').select('id, course_id, title, title_arabic').order('order_index'),
         ]);
 
-        if (gList) {
-          setGroups(gList.map((g: any) => ({ id: g.id, name: g.name, nameArabic: g.name_arabic || g.name })));
-        }
-        if (cList) {
-          setCourses(cList.map((c: any) => ({ id: c.id, title: c.title, titleArabic: c.title_arabic || c.title })));
-        }
-        if (lList) {
-          setLessons(lList.map((l: any) => ({ id: l.id, courseId: l.course_id, title: l.title, titleArabic: l.title_arabic || l.title })));
-        }
-      } catch (err) {
-        console.error('Error loading options:', err);
+        if (gRes.error) throwServiceError(gRes.error, { service: 'QuizModal', operation: 'loadGroups' });
+        if (cRes.error) throwServiceError(cRes.error, { service: 'QuizModal', operation: 'loadCourses' });
+        if (lRes.error) throwServiceError(lRes.error, { service: 'QuizModal', operation: 'loadLessons' });
+
+        setGroups((gRes.data || []).map((g: any) => ({ id: g.id, name: g.name, nameArabic: g.name_arabic || g.name })));
+        setCourses((cRes.data || []).map((c: any) => ({ id: c.id, title: c.title, titleArabic: c.title_arabic || c.title })));
+        setLessons((lRes.data || []).map((l: any) => ({ id: l.id, courseId: l.course_id, title: l.title, titleArabic: l.title_arabic || l.title })));
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, isRtl));
       }
     }
     loadOptions();
-  }, [isOpen]);
+  }, [isOpen, isRtl]);
 
   // Sync state when editing or resetting
   useEffect(() => {
@@ -189,9 +177,8 @@ export const QuizModal: React.FC<QuizModalProps> = ({
 
       onSuccess();
       onClose();
-    } catch (err: any) {
-      console.error('Quiz save error:', err);
-      setError(err.message || 'Failed to save assessment');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, isRtl));
     } finally {
       setLoading(false);
     }

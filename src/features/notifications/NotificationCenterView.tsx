@@ -35,6 +35,7 @@ import {
 } from './notificationUtils';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 
 interface NotificationCenterViewProps {
@@ -50,6 +51,8 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const [category, setCategory] = useState<NotificationCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -57,12 +60,13 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
   const loadData = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     else setIsRefreshing(true);
+    setLoadError(null);
 
     try {
       const res = await notificationService.fetchNotifications({ limit: 100 });
       setNotifications(res.notifications);
-    } catch {
-      // ignore
+    } catch (err) {
+      setLoadError(err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -73,31 +77,50 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
     loadData();
 
     if (user?.id) {
-      const unsubscribe = notificationService.subscribeToNotifications(user.id, () => {
-        loadData(false);
-      });
+      const unsubscribe = notificationService.subscribeToNotifications(
+        user.id,
+        () => {
+          loadData(false);
+        },
+        (err) => {
+          setActionError(err);
+        }
+      );
       return () => unsubscribe();
     }
   }, [user?.id]);
 
-  const handleMarkAsRead = async (id: string, e?: React.MouseEvent) => {
+  const handleMarkAsRead = async (id: string, e?: React.MouseEvent): Promise<boolean> => {
     if (e) e.stopPropagation();
-    await notificationService.markAsRead(id);
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n))
-    );
+    setActionError(null);
+    try {
+      await notificationService.markAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n))
+      );
+      return true;
+    } catch (err) {
+      setActionError(err);
+      return false;
+    }
   };
 
   const handleMarkAllAsRead = async () => {
-    await notificationService.markAllAsRead();
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, isRead: true, readAt: new Date().toISOString() }))
-    );
+    setActionError(null);
+    try {
+      await notificationService.markAllAsRead();
+      setNotifications((prev) =>
+        prev.map((n) => ({ ...n, isRead: true, readAt: new Date().toISOString() }))
+      );
+    } catch (err) {
+      setActionError(err);
+    }
   };
 
   const handleActionClick = async (notif: AppNotification) => {
     if (!notif.isRead) {
-      await handleMarkAsRead(notif.id);
+      const marked = await handleMarkAsRead(notif.id);
+      if (!marked) return;
     }
     if (notif.actionUrl && onNavigateToResource) {
       onNavigateToResource(notif.actionUrl);
@@ -289,6 +312,14 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
 
       {/* Notifications List */}
       <div className="space-y-3">
+        {Boolean(actionError) && (
+          <ErrorState
+            variant="banner"
+            error={actionError}
+            isRtl={isRtl}
+            onDismiss={() => setActionError(null)}
+          />
+        )}
         {isLoading ? (
           <div className="py-16 flex flex-col items-center justify-center">
             <LoadingSpinner size="lg" />
@@ -296,6 +327,12 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
               {isRtl ? 'جارِ تحميل الإشعارات...' : 'Loading notifications...'}
             </span>
           </div>
+        ) : loadError ? (
+          <ErrorState
+            error={loadError}
+            isRtl={isRtl}
+            onRetry={() => loadData(true)}
+          />
         ) : filteredList.length === 0 ? (
           <EmptyState
             icon={<Bell className="w-6 h-6 text-[#356AE6]" />}

@@ -18,6 +18,7 @@ import {
   fetchLessonResources,
   getSecureResourceUrl,
 } from './videoLibraryService';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   X,
   Play,
@@ -66,6 +67,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [resources, setResources] = useState<LearningResourceRecord[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [hasResumed, setHasResumed] = useState<boolean>(false);
+  const [modalError, setModalError] = useState<unknown>(null);
 
   const parsed = parseVideoUrl(video.videoUrl);
   const lastSyncRef = useRef<number>(Date.now());
@@ -76,7 +78,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     if (isOpen && video.lessonId) {
       fetchLessonResources(video.lessonId, !isStudent)
         .then((res) => setResources(res))
-        .catch((err) => console.warn('Could not load resources:', err));
+        .catch((err) => setModalError(err));
     }
   }, [isOpen, video.lessonId, isStudent]);
 
@@ -89,11 +91,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       setIsCompleted(Boolean(video.progress?.isCompleted));
       setHasResumed(false);
       setIsPlaying(false);
+      setModalError(null);
     }
   }, [isOpen, video]);
 
   // Sync progress to server (debounced/throttled)
-  const syncProgressToServer = async (pos: number, dur: number) => {
+  const syncProgressToServer = async (pos: number, dur: number, surfaceError = true) => {
     if (!isStudent) return;
     try {
       const updated = await recordVideoPlaybackProgress(video.id, pos, dur);
@@ -104,7 +107,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         if (onProgressUpdated) onProgressUpdated(video.id, true);
       }
     } catch (err) {
-      console.warn('Failed to save playback progress:', err);
+      if (surfaceError) {
+        setModalError(err);
+      }
     }
   };
 
@@ -137,7 +142,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   // Sync on unmount or close
   const handleModalClose = () => {
     if (isStudent && currentTime > 0) {
-      syncProgressToServer(currentTime, duration);
+      void syncProgressToServer(currentTime, duration, false);
     }
     setIsPlaying(false);
     onClose();
@@ -146,10 +151,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const handleDownloadResource = async (res: LearningResourceRecord) => {
     try {
       setDownloadingId(res.id);
+      setModalError(null);
       const url = await getSecureResourceUrl(res.id);
       window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (err: any) {
-      alert(err.message || 'Failed to download resource');
+    } catch (err: unknown) {
+      setModalError(err);
     } finally {
       setDownloadingId(null);
     }
@@ -203,6 +209,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          {Boolean(modalError) && (
+            <ErrorState
+              variant="banner"
+              error={modalError}
+              isRtl={isRtl}
+              onDismiss={() => setModalError(null)}
+            />
+          )}
+
           {/* Completion Celebration Alert */}
           {justCompletedToast && (
             <div className="p-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-xs font-medium flex items-center justify-between shadow-md animate-fade-in">

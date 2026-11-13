@@ -27,7 +27,8 @@ import {
   TargetAudience,
 } from './types';
 import { resolveCategoryBadge, resolvePriorityBadge, formatNotificationTime } from './notificationUtils';
-import { supabase } from '../../lib/supabase/client';
+import { requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
+import { ErrorState } from '../../components/ui/ErrorState';
 
 interface AnnouncementModalProps {
   isOpen: boolean;
@@ -64,9 +65,13 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   const [groups, setGroups] = useState<{ id: string; name: string; nameArabic?: string }[]>([]);
   const [students, setStudents] = useState<{ id: string; name: string; studentNumber?: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cohortError, setCohortError] = useState<unknown>(null);
+  const [submitError, setSubmitError] = useState<unknown>(null);
 
   useEffect(() => {
     if (isOpen) {
+      setCohortError(null);
+      setSubmitError(null);
       if (announcement) {
         setTitle(announcement.title);
         setTitleArabic(announcement.titleArabic);
@@ -108,39 +113,41 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   }, [isOpen, announcement]);
 
   const loadCohortData = async () => {
-    if (!supabase) return;
+    setCohortError(null);
     try {
+      const client = requireSupabaseClient({ service: 'AnnouncementModal', operation: 'loadCohortData' });
       const [groupsRes, studentsRes] = await Promise.all([
-        supabase.from('groups').select('id, name, name_arabic').eq('is_active', true),
-        supabase.from('profiles').select('id, full_name, full_name_arabic').eq('role', 'student').eq('status', 'active'),
+        client.from('groups').select('id, name, name_arabic').eq('is_active', true),
+        client.from('profiles').select('id, full_name, full_name_arabic').eq('role', 'student').eq('status', 'active'),
       ]);
 
-      if (groupsRes.data) {
-        setGroups(
-          groupsRes.data.map((g: any) => ({
-            id: g.id,
-            name: g.name,
-            nameArabic: g.name_arabic,
-          }))
-        );
-        if (groupsRes.data.length > 0 && !groupId) {
-          setGroupId(groupsRes.data[0].id);
-        }
+      if (groupsRes.error) {
+        throwServiceError(groupsRes.error, { service: 'AnnouncementModal', operation: 'loadGroups' });
+      }
+      if (studentsRes.error) {
+        throwServiceError(studentsRes.error, { service: 'AnnouncementModal', operation: 'loadStudents' });
       }
 
-      if (studentsRes.data) {
-        setStudents(
-          studentsRes.data.map((s: any) => ({
-            id: s.id,
-            name: s.full_name || s.full_name_arabic || 'Student',
-          }))
-        );
-        if (studentsRes.data.length > 0 && !studentId) {
-          setStudentId(studentsRes.data[0].id);
-        }
+      const loadedGroups = (groupsRes.data || []).map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        nameArabic: g.name_arabic,
+      }));
+      setGroups(loadedGroups);
+      if (loadedGroups.length > 0 && !groupId) {
+        setGroupId(loadedGroups[0].id);
       }
-    } catch {
-      // ignore
+
+      const loadedStudents = (studentsRes.data || []).map((s: any) => ({
+        id: s.id,
+        name: s.full_name || s.full_name_arabic || 'Student',
+      }));
+      setStudents(loadedStudents);
+      if (loadedStudents.length > 0 && !studentId) {
+        setStudentId(loadedStudents[0].id);
+      }
+    } catch (err) {
+      setCohortError(err);
     }
   };
 
@@ -169,9 +176,12 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   const handleSaveDraft = async () => {
     if (!title.trim() && !titleArabic.trim()) return;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await onSaveDraft(getFormData());
       onClose();
+    } catch (err) {
+      setSubmitError(err);
     } finally {
       setIsSubmitting(false);
     }
@@ -180,9 +190,12 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   const handlePublish = async () => {
     if (!title.trim() && !titleArabic.trim()) return;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await onPublishNow(getFormData());
       onClose();
+    } catch (err) {
+      setSubmitError(err);
     } finally {
       setIsSubmitting(false);
     }
@@ -211,6 +224,23 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
       maxWidth="2xl"
     >
       <div className="space-y-5" dir={isRtl ? 'rtl' : 'ltr'}>
+        {Boolean(cohortError) && (
+          <ErrorState
+            variant="banner"
+            error={cohortError}
+            isRtl={isRtl}
+            onRetry={loadCohortData}
+            onDismiss={() => setCohortError(null)}
+          />
+        )}
+        {Boolean(submitError) && (
+          <ErrorState
+            variant="banner"
+            error={submitError}
+            isRtl={isRtl}
+            onDismiss={() => setSubmitError(null)}
+          />
+        )}
         {/* Tab Toggle */}
         <div className="flex border-b border-slate-200">
           <button

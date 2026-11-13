@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { supabase } from '../../lib/supabase/client';
+import { requireSupabaseClient, throwServiceError, ServiceError } from '../../lib/errors/serviceError';
 
 export type GroupStatusFilter = 'all' | 'active' | 'inactive' | 'archived';
 
@@ -52,63 +52,12 @@ export interface GroupDetailedView extends GroupRecord {
   assignedCourses: GroupAssignedCourse[];
 }
 
-const PREVIEW_DEMO_GROUPS: GroupRecord[] = [
-  {
-    id: 'demo-group-1',
-    name: 'Group A - Intensive IELTS Prep',
-    nameArabic: 'المجموعة أ - الإعداد المكثف للآيلتس',
-    description: 'Targeted preparation for students aiming for band 6.5+ in Academic IELTS.',
-    academicYear: '2026/2027',
-    maxStudents: 25,
-    isActive: true,
-    archivedAt: null,
-    archivedBy: null,
-    archiveReason: null,
-    createdAt: '2026-08-15T10:00:00Z',
-    updatedAt: '2026-08-15T10:00:00Z',
-    studentCount: 2,
-  },
-  {
-    id: 'demo-group-2',
-    name: 'Group B - Advanced Academic English',
-    nameArabic: 'المجموعة ب - الإنجليزية الأكاديمية المتقدمة',
-    description: 'Focus on essay writing, critical analysis, and academic presentation skills.',
-    academicYear: '2026/2027',
-    maxStudents: 30,
-    isActive: true,
-    archivedAt: null,
-    archivedBy: null,
-    archiveReason: null,
-    createdAt: '2026-08-20T10:00:00Z',
-    updatedAt: '2026-08-20T10:00:00Z',
-    studentCount: 1,
-  },
-  {
-    id: 'demo-group-3',
-    name: 'Group C - Secondary School English Mastery',
-    nameArabic: 'المجموعة ج - إتقان اللغة الإنجليزية للمرحلة الثانوية',
-    description: 'Comprehensive curriculum aligned with Saudi Ministry of Education guidelines.',
-    academicYear: '2026/2027',
-    maxStudents: 30,
-    isActive: false,
-    archivedAt: null,
-    archivedBy: null,
-    archiveReason: null,
-    createdAt: '2026-08-25T10:00:00Z',
-    updatedAt: '2026-08-25T10:00:00Z',
-    studentCount: 0,
-  },
-];
+const SERVICE = 'groupService';
 
 export async function fetchGroups(filter: GroupStatusFilter = 'all'): Promise<GroupRecord[]> {
-  if (!supabase) {
-    if (filter === 'active') return PREVIEW_DEMO_GROUPS.filter((g) => g.isActive && !g.archivedAt);
-    if (filter === 'inactive') return PREVIEW_DEMO_GROUPS.filter((g) => !g.isActive && !g.archivedAt);
-    if (filter === 'archived') return PREVIEW_DEMO_GROUPS.filter((g) => Boolean(g.archivedAt));
-    return PREVIEW_DEMO_GROUPS.filter((g) => !g.archivedAt);
-  }
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'fetchGroups' });
 
-  let query = supabase
+  let query = client
     .from('groups')
     .select(`
       id,
@@ -133,33 +82,51 @@ export async function fetchGroups(filter: GroupStatusFilter = 'all'): Promise<Gr
   } else if (filter === 'archived') {
     query = query.not('archived_at', 'is', null);
   } else {
-    // Default 'all' excludes archived groups unless specifically requested
     query = query.is('archived_at', null);
   }
 
-  const { data: groups, error } = await query;
-
-  if (error) {
-    throw new Error(`Failed to fetch academic groups: ${error.message}`);
+  let groupsRes;
+  try {
+    groupsRes = await query;
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'fetchGroups' });
   }
 
-  if (!groups || groups.length === 0) {
+  if (groupsRes.error) {
+    throwServiceError(groupsRes.error, {
+      service: SERVICE,
+      operation: 'fetchGroups',
+      fallbackMessage: 'Failed to fetch academic groups',
+    });
+  }
+
+  const groups = groupsRes.data || [];
+  if (groups.length === 0) {
     return [];
   }
 
-  // Count active enrollments per group
-  const { data: memberships } = await supabase
-    .from('group_students')
-    .select('group_id');
-
-  const countMap = new Map<string, number>();
-  if (memberships) {
-    for (const m of memberships) {
-      countMap.set(m.group_id, (countMap.get(m.group_id) || 0) + 1);
-    }
+  // Count enrollments per group cleanly — fail if secondary query fails so 0 is never fabricated
+  let membershipsRes;
+  try {
+    membershipsRes = await client.from('group_students').select('group_id');
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'fetchGroups.memberships' });
   }
 
-  return groups.map((g) => ({
+  if (membershipsRes.error) {
+    throwServiceError(membershipsRes.error, {
+      service: SERVICE,
+      operation: 'fetchGroups.memberships',
+      fallbackMessage: 'Failed to load group enrollment counts',
+    });
+  }
+
+  const countMap = new Map<string, number>();
+  for (const m of membershipsRes.data || []) {
+    countMap.set(m.group_id, (countMap.get(m.group_id) || 0) + 1);
+  }
+
+  return groups.map((g: any) => ({
     id: g.id,
     name: g.name,
     nameArabic: g.name_arabic,
@@ -184,27 +151,35 @@ export async function createGroup(params: {
   maxStudents: number;
   isActive: boolean;
 }): Promise<GroupRecord> {
-  if (!supabase) {
-    throw new Error('Supabase client is not configured.');
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'createGroup' });
+
+  let res;
+  try {
+    res = await client
+      .from('groups')
+      .insert({
+        name: params.name.trim(),
+        name_arabic: params.nameArabic.trim(),
+        description: params.description?.trim() || null,
+        academic_year: params.academicYear.trim(),
+        max_students: params.maxStudents,
+        is_active: params.isActive,
+      })
+      .select('*')
+      .single();
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'createGroup' });
   }
 
-  const { data, error } = await supabase
-    .from('groups')
-    .insert({
-      name: params.name.trim(),
-      name_arabic: params.nameArabic.trim(),
-      description: params.description?.trim() || null,
-      academic_year: params.academicYear.trim(),
-      max_students: params.maxStudents,
-      is_active: params.isActive,
-    })
-    .select('*')
-    .single();
-
-  if (error) {
-    throw new Error(`Failed to create group: ${error.message}`);
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'createGroup',
+      fallbackMessage: 'Failed to create group',
+    });
   }
 
+  const data = res.data;
   return {
     id: data.id,
     name: data.name,
@@ -228,107 +203,141 @@ export async function updateGroup(params: {
   maxStudents: number;
   isActive: boolean;
 }): Promise<void> {
-  if (!supabase) return;
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'updateGroup' });
 
-  const { error } = await supabase
-    .from('groups')
-    .update({
-      name: params.name.trim(),
-      name_arabic: params.nameArabic.trim(),
-      description: params.description?.trim() || null,
-      academic_year: params.academicYear.trim(),
-      max_students: params.maxStudents,
-      is_active: params.isActive,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', params.id);
+  let res;
+  try {
+    res = await client
+      .from('groups')
+      .update({
+        name: params.name.trim(),
+        name_arabic: params.nameArabic.trim(),
+        description: params.description?.trim() || null,
+        academic_year: params.academicYear.trim(),
+        max_students: params.maxStudents,
+        is_active: params.isActive,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', params.id);
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'updateGroup' });
+  }
 
-  if (error) {
-    throw new Error(`Failed to update group: ${error.message}`);
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'updateGroup',
+      fallbackMessage: 'Failed to update group',
+    });
   }
 }
 
 export async function fetchGroupDetails(groupId: string): Promise<GroupDetailedView> {
-  if (!supabase) {
-    const demo = PREVIEW_DEMO_GROUPS.find((g) => g.id === groupId) || PREVIEW_DEMO_GROUPS[0];
-    return {
-      ...demo,
-      roster: [
-        {
-          studentId: 'demo-student-1',
-          fullName: 'Ahmed Mohammed Al-Harbi',
-          fullNameArabic: 'أحمد محمد الحربي',
-          username: 'ahmed.harbi',
-          studentNumber: 'WES-2026-001',
-          status: 'active',
-          joinedAt: '2026-09-01T10:00:00Z',
-          isPrimary: true,
-        },
-      ],
-      assignedCourses: [
-        {
-          courseId: 'demo-course-1',
-          title: 'IELTS Academic Writing & Speaking Mastery',
-          titleArabic: 'إتقان الكتابة والمحادثة الأكاديمية لاختبار الآيلتس',
-          level: 'advanced',
-          assignedAt: '2026-09-01T10:00:00Z',
-        },
-      ],
-    };
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'fetchGroupDetails' });
+
+  let gRes;
+  try {
+    gRes = await client.from('groups').select('*').eq('id', groupId).single();
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'fetchGroupDetails' });
   }
 
-  // 1. Fetch group metadata
-  const { data: g, error: gErr } = await supabase
-    .from('groups')
-    .select('*')
-    .eq('id', groupId)
-    .single();
-
-  if (gErr || !g) {
-    throw new Error(`Group not found: ${gErr?.message}`);
+  if (gRes.error) {
+    throwServiceError(gRes.error, {
+      service: SERVICE,
+      operation: 'fetchGroupDetails',
+      fallbackMessage: 'Failed to load group details',
+    });
   }
 
-  // 2. Fetch enrolled students and their academic profiles
-  const [rosterRes, coursesRes] = await Promise.all([
-    supabase
-      .from('group_students')
-      .select(`
-        student_id,
-        joined_at,
-        profiles:student_id (
-          id,
-          full_name,
-          full_name_arabic,
-          phone,
-          status
-        )
-      `)
-      .eq('group_id', groupId),
-    supabase
-      .from('group_courses')
-      .select(`
-        course_id,
-        assigned_at,
-        courses:course_id (
-          id,
-          title,
-          title_arabic,
-          level
-        )
-      `)
-      .eq('group_id', groupId),
-  ]);
+  if (!gRes.data) {
+    throw new ServiceError({
+      category: 'NOT_FOUND',
+      message: 'Group not found.',
+      service: SERVICE,
+      operation: 'fetchGroupDetails',
+      code: 'PGRST116',
+    });
+  }
 
-  // Fetch usernames and student numbers for roster
+  const g = gRes.data;
+
+  let rosterRes;
+  let coursesRes;
+  try {
+    [rosterRes, coursesRes] = await Promise.all([
+      client
+        .from('group_students')
+        .select(`
+          student_id,
+          joined_at,
+          profiles:student_id (
+            id,
+            full_name,
+            full_name_arabic,
+            phone,
+            status
+          )
+        `)
+        .eq('group_id', groupId),
+      client
+        .from('group_courses')
+        .select(`
+          course_id,
+          assigned_at,
+          courses:course_id (
+            id,
+            title,
+            title_arabic,
+            level
+          )
+        `)
+        .eq('group_id', groupId),
+    ]);
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'fetchGroupDetails.relations' });
+  }
+
+  if (rosterRes.error) {
+    throwServiceError(rosterRes.error, {
+      service: SERVICE,
+      operation: 'fetchGroupDetails.roster',
+      fallbackMessage: 'Failed to load group student roster',
+    });
+  }
+
+  if (coursesRes.error) {
+    throwServiceError(coursesRes.error, {
+      service: SERVICE,
+      operation: 'fetchGroupDetails.courses',
+      fallbackMessage: 'Failed to load courses assigned to group',
+    });
+  }
+
   const studentIds = (rosterRes.data || []).map((r: any) => r.student_id);
   const academicMap = new Map<string, any>();
+
   if (studentIds.length > 0) {
-    const { data: acads } = await supabase
-      .from('student_academic_profiles')
-      .select('profile_id, username, student_number, group_id')
-      .in('profile_id', studentIds);
-    if (acads) {
-      for (const a of acads) academicMap.set(a.profile_id, a);
+    let acadRes;
+    try {
+      acadRes = await client
+        .from('student_academic_profiles')
+        .select('profile_id, username, student_number, group_id')
+        .in('profile_id', studentIds);
+    } catch (err) {
+      throwServiceError(err, { service: SERVICE, operation: 'fetchGroupDetails.academicProfiles' });
+    }
+
+    if (acadRes.error) {
+      throwServiceError(acadRes.error, {
+        service: SERVICE,
+        operation: 'fetchGroupDetails.academicProfiles',
+        fallbackMessage: 'Failed to load student academic profiles for group roster',
+      });
+    }
+
+    for (const a of acadRes.data || []) {
+      academicMap.set(a.profile_id, a);
     }
   }
 
@@ -382,45 +391,47 @@ export async function archiveGroup(params: {
   groupId: string;
   reason: string;
 }): Promise<void> {
-  if (!supabase) {
-    const demo = PREVIEW_DEMO_GROUPS.find((g) => g.id === params.groupId);
-    if (demo) {
-      demo.archivedAt = new Date().toISOString();
-      demo.archiveReason = params.reason.trim();
-    }
-    return;
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'archiveGroup' });
+
+  let res;
+  try {
+    res = await client.rpc('archive_group', {
+      p_group_id: params.groupId,
+      p_reason: params.reason.trim(),
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'archiveGroup' });
   }
 
-  const { error } = await supabase.rpc('archive_group', {
-    p_group_id: params.groupId,
-    p_reason: params.reason.trim(),
-  });
-
-  if (error) {
-    throw new Error(error.message || 'Failed to archive group');
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'archiveGroup',
+      fallbackMessage: 'Failed to archive group',
+    });
   }
 }
 
 export async function restoreGroup(params: {
   groupId: string;
 }): Promise<void> {
-  if (!supabase) {
-    const demo = PREVIEW_DEMO_GROUPS.find((g) => g.id === params.groupId);
-    if (demo) {
-      demo.archivedAt = null;
-      demo.archivedBy = null;
-      demo.archiveReason = null;
-      demo.isActive = true;
-    }
-    return;
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'restoreGroup' });
+
+  let res;
+  try {
+    res = await client.rpc('restore_group', {
+      p_group_id: params.groupId,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'restoreGroup' });
   }
 
-  const { error } = await supabase.rpc('restore_group', {
-    p_group_id: params.groupId,
-  });
-
-  if (error) {
-    throw new Error(error.message || 'Failed to restore group');
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'restoreGroup',
+      fallbackMessage: 'Failed to restore group',
+    });
   }
 }
 
@@ -429,16 +440,25 @@ export async function enrollStudentInGroup(params: {
   groupId: string;
   setAsPrimary?: boolean;
 }): Promise<void> {
-  if (!supabase) return;
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'enrollStudentInGroup' });
 
-  const { error } = await supabase.rpc('enroll_student_in_group', {
-    p_student_id: params.studentId,
-    p_group_id: params.groupId,
-    p_set_as_primary: params.setAsPrimary ?? false,
-  });
+  let res;
+  try {
+    res = await client.rpc('enroll_student_in_group', {
+      p_student_id: params.studentId,
+      p_group_id: params.groupId,
+      p_set_as_primary: params.setAsPrimary ?? false,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'enrollStudentInGroup' });
+  }
 
-  if (error) {
-    throw new Error(error.message || 'Failed to enroll student in group');
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'enrollStudentInGroup',
+      fallbackMessage: 'Failed to enroll student in group',
+    });
   }
 }
 
@@ -446,15 +466,24 @@ export async function removeStudentFromGroup(params: {
   studentId: string;
   groupId: string;
 }): Promise<void> {
-  if (!supabase) return;
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'removeStudentFromGroup' });
 
-  const { error } = await supabase.rpc('remove_student_from_group', {
-    p_student_id: params.studentId,
-    p_group_id: params.groupId,
-  });
+  let res;
+  try {
+    res = await client.rpc('remove_student_from_group', {
+      p_student_id: params.studentId,
+      p_group_id: params.groupId,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'removeStudentFromGroup' });
+  }
 
-  if (error) {
-    throw new Error(error.message || 'Failed to remove student from group');
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'removeStudentFromGroup',
+      fallbackMessage: 'Failed to remove student from group',
+    });
   }
 }
 
@@ -463,15 +492,24 @@ export async function transferStudentGroup(params: {
   fromGroupId: string;
   toGroupId: string;
 }): Promise<void> {
-  if (!supabase) return;
+  const client = requireSupabaseClient({ service: SERVICE, operation: 'transferStudentGroup' });
 
-  const { error } = await supabase.rpc('transfer_student_group', {
-    p_student_id: params.studentId,
-    p_from_group_id: params.fromGroupId,
-    p_to_group_id: params.toGroupId,
-  });
+  let res;
+  try {
+    res = await client.rpc('transfer_student_group', {
+      p_student_id: params.studentId,
+      p_from_group_id: params.fromGroupId,
+      p_to_group_id: params.toGroupId,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'transferStudentGroup' });
+  }
 
-  if (error) {
-    throw new Error(error.message || 'Failed to transfer student between groups');
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'transferStudentGroup',
+      fallbackMessage: 'Failed to transfer student between groups',
+    });
   }
 }

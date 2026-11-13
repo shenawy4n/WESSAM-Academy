@@ -5,9 +5,14 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const env: Record<string, string | undefined> =
+  typeof import.meta !== 'undefined' && (import.meta as { env?: Record<string, string | undefined> }).env
+    ? ((import.meta as { env?: Record<string, string | undefined> }).env as Record<string, string | undefined>)
+    : {};
+
+const supabaseUrl = env.VITE_SUPABASE_URL;
 const supabasePublishableKey =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY;
 
 export function getMissingSupabaseEnv(): string[] {
   const missing: string[] = [];
@@ -25,7 +30,7 @@ export function isSupabaseConfigured(): boolean {
 }
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured()
-  ? createClient(supabaseUrl, supabasePublishableKey, {
+  ? createClient(supabaseUrl!, supabasePublishableKey!, {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
@@ -33,3 +38,14 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured()
       },
     })
   : null;
+
+let testClientOverride: SupabaseClient | null | undefined = undefined;
+
+export function setSupabaseClientForTesting(client: SupabaseClient | null | undefined): void {
+  testClientOverride = client;
+}
+
+export function getSupabaseClient(): SupabaseClient | null {
+  return testClientOverride !== undefined ? testClientOverride : supabase;
+}
+

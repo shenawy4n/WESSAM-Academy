@@ -58,14 +58,13 @@ function AppContent() {
   const { user, role, isLoading } = useAuth();
   const isConfigured = isSupabaseConfigured();
 
-  const [previewBypass, setPreviewBypass] = useState<boolean>(false);
   const [currentTeacherView, setCurrentTeacherView] = useState<TeacherView>('dashboard');
   const [currentStudentView, setCurrentStudentView] = useState<StudentView>('home');
   const [teacherNotificationTab, setTeacherNotificationTab] = useState<'announcements' | 'inbox'>('announcements');
 
-  // If Supabase environment is missing and user has not clicked inspection mode
-  if (!isConfigured && !previewBypass) {
-    return <ConfigErrorScreen onBypassToPreview={() => setPreviewBypass(true)} />;
+  // Strict configuration gate: never bypass to a fake preview shell when backend is unconfigured
+  if (!isConfigured) {
+    return <ConfigErrorScreen />;
   }
 
   // Prevent flicker or momentary display of unauthenticated screens while session resolves

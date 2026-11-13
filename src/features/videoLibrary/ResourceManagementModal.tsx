@@ -14,6 +14,8 @@ import {
   getSecureResourceUrl,
 } from './videoLibraryService';
 import { getResourceTypeLabel, validateResourceType } from './videoLibraryUtils';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { getErrorMessage } from '../../lib/errors/serviceError';
 import {
   X,
   Paperclip,
@@ -58,14 +60,16 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
   const [isPublished, setIsPublished] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   const loadResources = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const data = await fetchLessonResources(lessonId, true);
       setResources(data);
-    } catch (err: any) {
-      console.warn('Could not load resources:', err);
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -76,6 +80,7 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
       loadResources();
       setTab('list');
       setErrorMsg(null);
+      setLoadError(null);
     }
   }, [isOpen, lessonId]);
 
@@ -112,8 +117,8 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
       await loadResources();
       resetForm();
       setTab('list');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to upload resource');
+    } catch (err: unknown) {
+      setErrorMsg(getErrorMessage(err, isRtl));
     } finally {
       setIsSubmitting(false);
     }
@@ -146,8 +151,8 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
       await loadResources();
       resetForm();
       setTab('list');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to add resource link');
+    } catch (err: unknown) {
+      setErrorMsg(getErrorMessage(err, isRtl));
     } finally {
       setIsSubmitting(false);
     }
@@ -158,19 +163,21 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
       return;
     }
     try {
+      setErrorMsg(null);
       await deleteResource(resId);
       await loadResources();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete resource');
+    } catch (err: unknown) {
+      setErrorMsg(getErrorMessage(err, isRtl));
     }
   };
 
   const handleDownload = async (resId: string) => {
     try {
+      setErrorMsg(null);
       const url = await getSecureResourceUrl(resId);
       window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (err: any) {
-      alert(err.message || 'Failed to obtain download URL');
+    } catch (err: unknown) {
+      setErrorMsg(getErrorMessage(err, isRtl));
     }
   };
 
@@ -271,6 +278,8 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
                 <div className="py-8 text-center text-xs text-slate-400">
                   {isRtl ? 'جاري تحميل الموارد...' : 'Loading resources...'}
                 </div>
+              ) : loadError ? (
+                <ErrorState error={loadError} isRtl={isRtl} onRetry={loadResources} />
               ) : resources.length === 0 ? (
                 <div className="py-8 text-center text-slate-400 space-y-2">
                   <FileText className="w-8 h-8 mx-auto text-slate-300" />

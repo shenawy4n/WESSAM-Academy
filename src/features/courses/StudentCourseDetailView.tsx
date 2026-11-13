@@ -13,6 +13,7 @@ import {
 } from './coursesService';
 import { StudentLessonView } from './StudentLessonView';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   ArrowLeft,
   ArrowRight,
@@ -37,6 +38,7 @@ export const StudentCourseDetailView: React.FC<StudentCourseDetailViewProps> = (
   const { t, isRtl } = useLocale();
 
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [course, setCourse] = useState<CourseRecord | null>(null);
   const [units, setUnits] = useState<CourseUnitRecord[]>([]);
   const [totalLessons, setTotalLessons] = useState(0);
@@ -49,6 +51,7 @@ export const StudentCourseDetailView: React.FC<StudentCourseDetailViewProps> = (
   const loadDetails = async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const data = await fetchStudentCourseDetails(courseId);
       setCourse(data.course);
       setUnits(data.units);
@@ -62,8 +65,8 @@ export const StudentCourseDetailView: React.FC<StudentCourseDetailViewProps> = (
         expMap[u.id] = true;
       });
       setExpandedUnits(expMap);
-    } catch (err: any) {
-      console.error('Failed to load course details', err);
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setIsLoading(false);
     }
@@ -128,14 +131,21 @@ export const StudentCourseDetailView: React.FC<StudentCourseDetailViewProps> = (
 
   if (!course) {
     return (
-      <div className="p-8 text-center text-slate-500">
-        <p>{isRtl ? 'لم يتم العثور على المقرر أو غير مصرح به' : 'Course not accessible'}</p>
+      <div className="space-y-4 max-w-5xl mx-auto">
         <button
           onClick={onBack}
-          className="mt-4 px-4 py-2 bg-[#356AE6] text-white rounded-xl text-xs font-semibold"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
         >
-          {t.common.back}
+          {isRtl ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
+          <span>{t.courses.backToCourses}</span>
         </button>
+        {loadError ? (
+          <ErrorState error={loadError} isRtl={isRtl} onRetry={loadDetails} />
+        ) : (
+          <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
+            <p>{isRtl ? 'لم يتم العثور على المقرر أو غير مصرح به' : 'Course not accessible'}</p>
+          </div>
+        )}
       </div>
     );
   }

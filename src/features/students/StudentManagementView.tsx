@@ -21,6 +21,7 @@ import { Input } from '../../components/ui/Input';
 import { StatusIndicator } from '../../components/ui/StatusIndicator';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   Users,
   UserPlus,
@@ -51,6 +52,7 @@ export const StudentManagementView: React.FC = () => {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [groups, setGroups] = useState<GroupRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -113,6 +115,7 @@ export const StudentManagementView: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       setError(null);
       const [studentsData, groupsData] = await Promise.all([
         fetchStudents(),
@@ -120,9 +123,8 @@ export const StudentManagementView: React.FC = () => {
       ]);
       setStudents(studentsData);
       setGroups(groupsData);
-    } catch (err: any) {
-      console.error('Error loading student directory:', err);
-      setError(err?.message || 'Failed to load students directory.');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -482,6 +484,10 @@ export const StudentManagementView: React.FC = () => {
         {loading ? (
           <div className="p-12 flex justify-center items-center">
             <LoadingSpinner size="lg" label={t.common.loading} />
+          </div>
+        ) : loadError ? (
+          <div className="p-6">
+            <ErrorState error={loadError} isRtl={isRtl} onRetry={loadData} />
           </div>
         ) : filteredStudents.length === 0 ? (
           <div className="p-8">

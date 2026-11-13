@@ -19,6 +19,7 @@ import { AssignmentRecord, SubmissionRecord } from './types';
 import { fetchStudentAssignments } from './assignmentService';
 import { formatAssignmentDateTime, getAssignmentDeadlineStatus } from './assignmentUtils';
 import { StudentSubmissionModal } from './StudentSubmissionModal';
+import { ErrorState } from '../../components/ui/ErrorState';
 
 export const StudentAssignmentsView: React.FC = () => {
   const [assignments, setAssignments] = useState<AssignmentRecord[]>([]);
@@ -27,7 +28,7 @@ export const StudentAssignmentsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'submitted' | 'graded'>('pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAssignment, setSelectedAssignment] = useState<AssignmentRecord | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   const loadData = async () => {
     try {
@@ -36,9 +37,8 @@ export const StudentAssignmentsView: React.FC = () => {
       const data = await fetchStudentAssignments();
       setAssignments(data.assignments);
       setSubmissions(data.mySubmissions);
-    } catch (err: any) {
-      console.error('Failed to load student assignments:', err);
-      setLoadError(err.message || 'فشل تحميل الواجبات');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -163,17 +163,12 @@ export const StudentAssignmentsView: React.FC = () => {
         />
       </div>
 
-      {loadError && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>{loadError}</span>
-        </div>
-      )}
-
       {/* Assignments List Cards */}
       <div className="space-y-3">
         {loading ? (
           <div className="p-12 text-center text-xs text-slate-400">جارٍ تحميل الواجبات...</div>
+        ) : loadError ? (
+          <ErrorState error={loadError} isRtl={true} onRetry={loadData} />
         ) : filteredList.length === 0 ? (
           <div className="p-12 text-center bg-white rounded-2xl border border-slate-200">
             <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />

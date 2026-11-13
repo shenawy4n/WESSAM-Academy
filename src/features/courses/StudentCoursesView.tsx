@@ -8,6 +8,7 @@ import { useLocale } from '../../hooks/useLocale';
 import { StudentCourseSummary, fetchStudentCourses } from './coursesService';
 import { StudentCourseDetailView } from './StudentCourseDetailView';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { BookOpen, PlayCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 
 export const StudentCoursesView: React.FC = () => {
@@ -15,15 +16,17 @@ export const StudentCoursesView: React.FC = () => {
 
   const [courses, setCourses] = useState<StudentCourseSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
 
   const loadCourses = async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const data = await fetchStudentCourses();
       setCourses(data);
-    } catch (err: any) {
-      console.error('Failed to fetch student courses', err);
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setIsLoading(false);
     }
@@ -64,6 +67,8 @@ export const StudentCoursesView: React.FC = () => {
         <div className="p-12 text-center">
           <LoadingSpinner size="lg" label={t.common.loading} />
         </div>
+      ) : loadError ? (
+        <ErrorState error={loadError} isRtl={isRtl} onRetry={loadCourses} />
       ) : courses.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
           <BookOpen className="w-12 h-12 text-slate-400 mx-auto mb-3" />

@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocale } from '../../hooks/useLocale';
 import { useAuth } from '../auth/AuthContext';
-import { supabase } from '../../lib/supabase/client';
+import { requireSupabaseClient, ServiceError, throwServiceError } from '../../lib/errors/serviceError';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   BookOpen,
   Radio,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react';
 import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
 import { getAuthorizedMeetingLink } from '../liveSessions/liveSessionsService';
+import { fetchStudentAssignments } from '../assignments/assignmentService';
 
 interface StudentUpcomingSession {
   id: string;
@@ -38,57 +40,87 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   const { t, isRtl } = useLocale();
   const { user, studentProfile } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<unknown>(null);
+  const [joinError, setJoinError] = useState<unknown>(null);
   const [coursesCount, setCoursesCount] = useState<number>(0);
-  const [liveSessionsCount, setLiveSessionsCount] = useState<number>(0);
   const [assignmentsCount, setAssignmentsCount] = useState<number>(0);
   const [upcomingSessions, setUpcomingSessions] = useState<StudentUpcomingSession[]>([]);
   const [joiningId, setJoiningId] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadStudentData() {
-      if (!supabase || !user) {
-        setCoursesCount(2);
-        setLoading(false);
+  const loadStudentData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const client = requireSupabaseClient({ service: 'StudentDashboard', operation: 'loadStudentData' });
+      if (!user) {
+        throw new ServiceError({
+          category: 'AUTHENTICATION_ERROR',
+          message: 'Authenticated user required to load dashboard.',
+          service: 'StudentDashboard',
+          operation: 'loadStudentData',
+        });
+      }
+
+      if (!studentProfile?.groupId) {
+        setCoursesCount(0);
+        setAssignmentsCount(0);
+        setUpcomingSessions([]);
         return;
       }
-      try {
-        setLoading(true);
-        if (studentProfile?.groupId) {
-          const [{ count: cCount }, { count: sCount }, { data: sessionRows }] = await Promise.all([
-            supabase.from('group_courses').select('id', { count: 'exact', head: true }).eq('group_id', studentProfile.groupId),
-            supabase.from('live_sessions').select('id', { count: 'exact', head: true }).eq('group_id', studentProfile.groupId).eq('status', 'scheduled'),
-            supabase
-              .from('live_sessions')
-              .select('id, title, title_arabic, start_time, duration_minutes, provider')
-              .eq('group_id', studentProfile.groupId)
-              .eq('status', 'scheduled')
-              .order('start_time', { ascending: true })
-              .limit(3),
-          ]);
-          setCoursesCount(cCount || 0);
-          setLiveSessionsCount(sCount || 0);
-          if (sessionRows) {
-            setUpcomingSessions(sessionRows as StudentUpcomingSession[]);
-          }
-        }
-      } catch (err) {
-        console.error('Error querying student dashboard data:', err);
-      } finally {
-        setLoading(false);
+
+      const [coursesRes, sessionsRes, studentAssignData] = await Promise.all([
+        client.from('group_courses').select('id', { count: 'exact', head: true }).eq('group_id', studentProfile.groupId),
+        client
+          .from('live_sessions')
+          .select('id, title, title_arabic, start_time, duration_minutes, provider')
+          .eq('group_id', studentProfile.groupId)
+          .eq('status', 'scheduled')
+          .order('start_time', { ascending: true })
+          .limit(3),
+        fetchStudentAssignments(),
+      ]);
+
+      if (coursesRes.error) {
+        throwServiceError(coursesRes.error, { service: 'StudentDashboard', operation: 'countGroupCourses' });
       }
+      if (sessionsRes.error) {
+        throwServiceError(sessionsRes.error, { service: 'StudentDashboard', operation: 'fetchUpcomingSessions' });
+      }
+
+      setCoursesCount(coursesRes.count ?? 0);
+      const pendingCount = studentAssignData.assignments.filter((a) => {
+        const subs = studentAssignData.mySubmissions[a.id] || [];
+        return !subs.some((s) => s.status === 'submitted' || s.status === 'graded');
+      }).length;
+      setAssignmentsCount(pendingCount);
+      setUpcomingSessions((sessionsRes.data || []) as StudentUpcomingSession[]);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-    loadStudentData();
   }, [user, studentProfile]);
 
+  useEffect(() => {
+    loadStudentData();
+  }, [loadStudentData]);
+
   const handleJoinClass = async (sessionId: string) => {
+    setJoinError(null);
     try {
       setJoiningId(sessionId);
       const link = await getAuthorizedMeetingLink(sessionId);
-      if (link) {
-        window.open(link, '_blank', 'noopener,noreferrer');
+      if (!link) {
+        throw new ServiceError({
+          category: 'NOT_FOUND',
+          message: isRtl ? 'رابط الحصة المباشرة غير متاح حالياً.' : 'Live meeting link is not available yet.',
+          service: 'StudentDashboard',
+          operation: 'handleJoinClass',
+        });
       }
+      window.open(link, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      console.error('Failed to get meeting link:', err);
+      setJoinError(err);
     } finally {
       setJoiningId(null);
     }
@@ -133,6 +165,13 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
         </div>
       </div>
 
+      {Boolean(error) && (
+        <ErrorState variant="banner" error={error} isRtl={isRtl} onRetry={loadStudentData} />
+      )}
+      {Boolean(joinError) && (
+        <ErrorState variant="banner" error={joinError} isRtl={isRtl} onDismiss={() => setJoinError(null)} />
+      )}
+
       {/* Main Grid: My Courses & Upcoming Live Classes */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 Cols): Enrolled Courses & Assignments */}
@@ -154,13 +193,31 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               }
             />
             <CardContent>
-              {coursesCount === 0 ? (
+              {error ? (
+                <ErrorState error={error} isRtl={isRtl} onRetry={loadStudentData} />
+              ) : coursesCount === 0 ? (
                 <EmptyState
                   icon={<BookOpen className="w-6 h-6 text-slate-400" />}
                   title={t.studentDashboard.noEnrolledCourses}
                   description={isRtl ? 'عند تفعيل حسابك وإضافتك لمجموعتك من قِبل الأستاذ وسام، ستظهر المقررات الدراسية ووحدات الدروس هنا مباشرة.' : 'Once enrolled by your teacher, your course units, lessons, and video materials will appear here.'}
                 />
-              ) : null}
+              ) : (
+                <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div>
+                    <p className="text-sm font-bold text-[#14243A]">
+                      {isRtl
+                        ? `لديك ${coursesCount} مقرر دراسي مخصص لمجموعتك`
+                        : `You have ${coursesCount} enrolled course${coursesCount === 1 ? '' : 's'}`}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {isRtl ? 'افتح صفحة المقررات لاستعراض الوحدات والدروس.' : 'Open My Courses to browse units and lessons.'}
+                    </p>
+                  </div>
+                  <Button variant="primary" size="sm" onClick={() => onNavigate('courses')}>
+                    {isRtl ? 'فتح المقررات' : 'Open Courses'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -180,11 +237,31 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               }
             />
             <CardContent>
-              <EmptyState
-                icon={<ClipboardList className="w-6 h-6 text-slate-400" />}
-                title={t.studentDashboard.noPendingAssignments}
-                description={isRtl ? 'لا توجد تكاليف متأخرة أو واجبات بانتظار التسليم.' : 'No outstanding tasks are due at this moment.'}
-              />
+              {error ? (
+                <ErrorState error={error} isRtl={isRtl} onRetry={loadStudentData} />
+              ) : assignmentsCount === 0 ? (
+                <EmptyState
+                  icon={<ClipboardList className="w-6 h-6 text-slate-400" />}
+                  title={t.studentDashboard.noPendingAssignments}
+                  description={isRtl ? 'لا توجد تكاليف متأخرة أو واجبات بانتظار التسليم.' : 'No outstanding tasks are due at this moment.'}
+                />
+              ) : (
+                <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div>
+                    <p className="text-sm font-bold text-[#14243A]">
+                      {isRtl
+                        ? `يوجد ${assignmentsCount} واجب منشور لمجموعتك`
+                        : `${assignmentsCount} published assignment${assignmentsCount === 1 ? '' : 's'} for your group`}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {isRtl ? 'راجع صفحة الواجبات للتحقق من المواعيد وحالة التسليم.' : 'Visit Assignments to review due dates and submission status.'}
+                    </p>
+                  </div>
+                  <Button variant="primary" size="sm" onClick={() => onNavigate('assignments')}>
+                    {isRtl ? 'عرض الواجبات' : 'View Assignments'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -208,7 +285,9 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               }
             />
             <CardContent>
-              {upcomingSessions.length === 0 ? (
+              {error ? (
+                <ErrorState error={error} isRtl={isRtl} onRetry={loadStudentData} />
+              ) : upcomingSessions.length === 0 ? (
                 <EmptyState
                   icon={<Radio className="w-6 h-6 text-slate-400" />}
                   title={t.studentDashboard.noUpcomingClasses}

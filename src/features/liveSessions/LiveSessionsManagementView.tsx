@@ -29,6 +29,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { useLocale } from '../../hooks/useLocale';
 import {
   LiveSessionRecord,
@@ -40,14 +41,15 @@ import {
 import { SessionModal } from './SessionModal';
 import { AttendanceSheetModal } from './AttendanceSheetModal';
 import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
-import { supabase } from '../../lib/supabase/client';
+import { requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 
 export const LiveSessionsManagementView: React.FC = () => {
   const { isRtl } = useLocale();
 
   const [sessions, setSessions] = useState<LiveSessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
 
   // Filters
   const [timeframe, setTimeframe] = useState<'all' | 'upcoming' | 'past'>('upcoming');
@@ -66,19 +68,27 @@ export const LiveSessionsManagementView: React.FC = () => {
   useEffect(() => {
     async function loadGroups() {
       try {
-        if (supabase) {
-          const { data } = await supabase
-            .from('groups')
-            .select('id, name, name_arabic')
-            .order('name');
-          setGroups((data || []).map((g) => ({
-            id: g.id,
-            name: g.name,
-            nameArabic: g.name_arabic || g.name,
-          })));
+        const client = requireSupabaseClient({
+          service: 'liveSessionsManagementView',
+          operation: 'loadGroups',
+        });
+        const { data, error: grpErr } = await client
+          .from('groups')
+          .select('id, name, name_arabic')
+          .order('name');
+        if (grpErr) {
+          throwServiceError(grpErr, {
+            service: 'liveSessionsManagementView',
+            operation: 'loadGroups',
+          });
         }
-      } catch (err) {
-        console.error('Error loading filter groups:', err);
+        setGroups((data || []).map((g) => ({
+          id: g.id,
+          name: g.name,
+          nameArabic: g.name_arabic || g.name,
+        })));
+      } catch (err: unknown) {
+        setActionError(err);
       }
     }
     loadGroups();
@@ -87,7 +97,7 @@ export const LiveSessionsManagementView: React.FC = () => {
   const loadSessions = async () => {
     try {
       setLoading(true);
-      setError(null);
+      setLoadError(null);
       const data = await fetchTeacherLiveSessions({
         groupId: selectedGroup,
         status: selectedStatus,
@@ -95,9 +105,8 @@ export const LiveSessionsManagementView: React.FC = () => {
         search: searchQuery,
       });
       setSessions(data);
-    } catch (err: any) {
-      console.error('Failed to load sessions:', err);
-      setError(err.message || 'Error loading live sessions');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -109,25 +118,29 @@ export const LiveSessionsManagementView: React.FC = () => {
 
   const handleCopyLink = async (id: string) => {
     try {
+      setActionError(null);
       const link = await getAuthorizedMeetingLink(id);
-      if (link) {
-        await navigator.clipboard.writeText(link);
-        setCopiedId(id);
-        setTimeout(() => setCopiedId(null), 2000);
+      if (!link) {
+        throw new Error(isRtl ? 'رابط الحصة غير متوفر حالياً' : 'Meeting link is not available');
       }
-    } catch (err) {
-      console.error('Failed to copy meeting link:', err);
+      await navigator.clipboard.writeText(link);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
   const handleLaunchMeeting = async (id: string) => {
     try {
+      setActionError(null);
       const link = await getAuthorizedMeetingLink(id);
-      if (link) {
-        window.open(link, '_blank', 'noopener,noreferrer');
+      if (!link) {
+        throw new Error(isRtl ? 'رابط الحصة غير متوفر حالياً' : 'Meeting link is not available');
       }
-    } catch (err) {
-      console.error('Failed to open meeting link:', err);
+      window.open(link, '_blank', 'noopener,noreferrer');
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -138,10 +151,11 @@ export const LiveSessionsManagementView: React.FC = () => {
     if (!window.confirm(confirmMsg)) return;
 
     try {
+      setActionError(null);
       await cancelLiveSession(session.id);
-      loadSessions();
-    } catch (err: any) {
-      alert(`Error cancelling session: ${err.message}`);
+      await loadSessions();
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -152,10 +166,11 @@ export const LiveSessionsManagementView: React.FC = () => {
     if (!window.confirm(confirmMsg)) return;
 
     try {
+      setActionError(null);
       await deleteLiveSession(session.id);
-      loadSessions();
-    } catch (err: any) {
-      alert(`Error deleting session: ${err.message}`);
+      await loadSessions();
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -288,17 +303,23 @@ export const LiveSessionsManagementView: React.FC = () => {
         </div>
       </Card>
 
+      {Boolean(actionError) && (
+        <ErrorState
+          variant="banner"
+          error={actionError}
+          isRtl={isRtl}
+          onDismiss={() => setActionError(null)}
+        />
+      )}
+
       {/* Sessions Grid / List */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center gap-3 text-xs text-slate-500">
           <LoadingSpinner size="lg" />
           <span>{isRtl ? 'جاري تحميل جدول الحصص المباشرة...' : 'Loading live classrooms...'}</span>
         </div>
-      ) : error ? (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
+      ) : loadError ? (
+        <ErrorState error={loadError} isRtl={isRtl} onRetry={loadSessions} />
       ) : sessions.length === 0 ? (
         <EmptyState
           icon={<Radio className="w-8 h-8 text-slate-400" />}

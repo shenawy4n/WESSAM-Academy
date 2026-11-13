@@ -12,6 +12,7 @@ import {
   getLessonResourceDownloadUrl,
 } from './coursesService';
 import { SafeVideoPlayer } from './SafeVideoPlayer';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   ArrowLeft,
   ArrowRight,
@@ -51,22 +52,24 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [successToast, setSuccessToast] = useState(false);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [downloadingResourceId, setDownloadingResourceId] = useState<string | null>(null);
 
-  const handleDownloadResource = async (resourceId: string, fallbackUrl: string) => {
+  const handleDownloadResource = async (resourceId: string) => {
+    setActionError(null);
     try {
       setDownloadingResourceId(resourceId);
       const url = await getLessonResourceDownloadUrl(resourceId);
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      console.warn('Failed to obtain signed URL, using fallback', err);
-      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+      setActionError(err);
     } finally {
       setDownloadingResourceId(null);
     }
   };
 
   const handleToggleComplete = async () => {
+    setActionError(null);
     try {
       setIsSaving(true);
       const nextState = !isCompleted;
@@ -76,8 +79,8 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
         setSuccessToast(true);
         setTimeout(() => setSuccessToast(false), 3000);
       }
-    } catch (err: any) {
-      console.error('Failed to update lesson progress', err);
+    } catch (err: unknown) {
+      setActionError(err);
     } finally {
       setIsSaving(false);
     }
@@ -151,6 +154,16 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
           </button>
         </div>
 
+        {/* Action Error Banner */}
+        {Boolean(actionError) && (
+          <ErrorState
+            variant="banner"
+            error={actionError}
+            isRtl={isRtl}
+            onDismiss={() => setActionError(null)}
+          />
+        )}
+
         {/* Success Toast */}
         {successToast && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
@@ -183,7 +196,7 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
                 <button
                   type="button"
                   key={res.id}
-                  onClick={() => handleDownloadResource(res.id, res.fileUrl)}
+                  onClick={() => handleDownloadResource(res.id)}
                   disabled={downloadingResourceId === res.id}
                   className="p-3 rounded-xl border border-slate-200 bg-white hover:border-[#356AE6] hover:bg-blue-50/30 transition-all flex items-center justify-between gap-3 text-start cursor-pointer disabled:opacity-60"
                 >

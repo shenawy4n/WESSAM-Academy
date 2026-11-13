@@ -52,7 +52,8 @@ import {
 import { QuestionEditorModal } from './QuestionEditorModal';
 import { QuestionPreviewModal } from './QuestionPreviewModal';
 import { QuestionImportModal } from './QuestionImportModal';
-import { supabase } from '../../lib/supabase/client';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { getErrorMessage, requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 
 export const QuestionBankView: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -84,21 +85,31 @@ export const QuestionBankView: React.FC = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
 
   // Status message
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [alertNotice, setAlertNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const fetchedItems = await fetchQuestionBankItems(true);
-      setItems(fetchedItems);
-      if (supabase) {
-        const coursesRes = await supabase.from('courses').select('id, title, title_arabic').order('title');
-        if (coursesRes.data) {
-          setCourses(coursesRes.data);
-        }
+      const client = requireSupabaseClient({
+        service: 'questionBankView',
+        operation: 'loadData',
+      });
+      const [fetchedItems, coursesRes] = await Promise.all([
+        fetchQuestionBankItems(true),
+        client.from('courses').select('id, title, title_arabic').order('title'),
+      ]);
+      if (coursesRes.error) {
+        throwServiceError(coursesRes.error, {
+          service: 'questionBankView',
+          operation: 'loadCourses',
+        });
       }
-    } catch (err: any) {
-      setAlertNotice({ type: 'error', message: err.message || 'فشل في تحميل الأسئلة' });
+      setItems(fetchedItems);
+      setCourses(coursesRes.data || []);
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -212,8 +223,8 @@ export const QuestionBankView: React.FC = () => {
         setAlertNotice({ type: 'success', message: 'تمت إضافة السؤال لبنك الأسئلة بنجاح' });
       }
       await loadData();
-    } catch (err: any) {
-      setAlertNotice({ type: 'error', message: err.message || 'فشل في حفظ السؤال' });
+    } catch (err: unknown) {
+      setAlertNotice({ type: 'error', message: getErrorMessage(err, true) });
       throw err;
     }
   };
@@ -223,8 +234,8 @@ export const QuestionBankView: React.FC = () => {
       await duplicateQuestionBankItem(questionId);
       setAlertNotice({ type: 'success', message: 'تم تكرار السؤال بنجاح' });
       await loadData();
-    } catch (err: any) {
-      setAlertNotice({ type: 'error', message: err.message || 'فشل في نسخ السؤال' });
+    } catch (err: unknown) {
+      setAlertNotice({ type: 'error', message: getErrorMessage(err, true) });
     }
   };
 
@@ -235,8 +246,8 @@ export const QuestionBankView: React.FC = () => {
       setSelectedIds(new Set());
       setAlertNotice({ type: 'success', message: `تمت أرشفة ${count} سؤال بنجاح` });
       await loadData();
-    } catch (err: any) {
-      setAlertNotice({ type: 'error', message: err.message || 'فشل في أرشفة الأسئلة' });
+    } catch (err: unknown) {
+      setAlertNotice({ type: 'error', message: getErrorMessage(err, true) });
     }
   };
 
@@ -247,8 +258,8 @@ export const QuestionBankView: React.FC = () => {
       setSelectedIds(new Set());
       setAlertNotice({ type: 'success', message: `تمت استعادة ${count} سؤال بنجاح` });
       await loadData();
-    } catch (err: any) {
-      setAlertNotice({ type: 'error', message: err.message || 'فشل في استعادة الأسئلة' });
+    } catch (err: unknown) {
+      setAlertNotice({ type: 'error', message: getErrorMessage(err, true) });
     }
   };
 
@@ -288,10 +299,10 @@ export const QuestionBankView: React.FC = () => {
         });
         await loadData();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setAlertNotice({
         type: 'error',
-        message: err.message || 'فشل في استيراد الأسئلة',
+        message: getErrorMessage(err, true),
       });
     }
   };
@@ -578,6 +589,10 @@ export const QuestionBankView: React.FC = () => {
         {/* Rows */}
         {loading ? (
           <div className="p-12 text-center text-slate-400 text-sm">جارٍ تحميل بنك الأسئلة...</div>
+        ) : loadError ? (
+          <div className="p-6">
+            <ErrorState error={loadError} isRtl={true} onRetry={loadData} />
+          </div>
         ) : filteredItems.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-sm space-y-2">
             <p>لا توجد أسئلة تطابق معايير البحث أو التصفية الحالية.</p>

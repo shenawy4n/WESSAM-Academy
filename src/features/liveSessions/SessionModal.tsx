@@ -26,7 +26,7 @@ import {
   getAuthorizedMeetingLink,
 } from './liveSessionsService';
 import { utcToRiyadhInputs } from '../../lib/dateUtils';
-import { supabase } from '../../lib/supabase/client';
+import { getErrorMessage, requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 
 interface GroupOption {
   id: string;
@@ -90,70 +90,60 @@ export const SessionModal: React.FC<SessionModalProps> = ({
     async function loadSelectOptions() {
       try {
         setLoading(true);
-        if (supabase) {
-          const [grpRes, crsRes, lsnRes] = await Promise.all([
-            supabase
-              .from('groups')
-              .select('id, name, name_arabic')
-              .eq('is_active', true)
-              .is('archived_at', null)
-              .order('name'),
-            supabase
-              .from('courses')
-              .select('id, title, title_arabic')
-              .eq('is_published', true)
-              .order('title'),
-            supabase
-              .from('lessons')
-              .select('id, course_id, title, title_arabic')
-              .order('order_index'),
-          ]);
+        const client = requireSupabaseClient({ service: 'SessionModal', operation: 'loadSelectOptions' });
+        const [grpRes, crsRes, lsnRes] = await Promise.all([
+          client
+            .from('groups')
+            .select('id, name, name_arabic')
+            .eq('is_active', true)
+            .is('archived_at', null)
+            .order('name'),
+          client
+            .from('courses')
+            .select('id, title, title_arabic')
+            .eq('is_published', true)
+            .order('title'),
+          client
+            .from('lessons')
+            .select('id, course_id, title, title_arabic')
+            .order('order_index'),
+        ]);
 
-          setGroups(
-            (grpRes.data || []).map((g) => ({
-              id: g.id,
-              name: g.name,
-              nameArabic: g.name_arabic || g.name,
-            }))
-          );
-          setCourses(
-            (crsRes.data || []).map((c) => ({
-              id: c.id,
-              title: c.title,
-              titleArabic: c.title_arabic || c.title,
-            }))
-          );
-          setLessons(
-            (lsnRes.data || []).map((l) => ({
-              id: l.id,
-              courseId: l.course_id,
-              title: l.title,
-              titleArabic: l.title_arabic || l.title,
-            }))
-          );
-        } else {
-          // Demo fallback options
-          setGroups([
-            { id: 'aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc', name: 'Group A - Intensive IELTS Prep', nameArabic: 'المجموعة أ - الإعداد المكثف للآيلتس' },
-            { id: 'group-2', name: 'Group B - Advanced Academic English', nameArabic: 'المجموعة ب - الإنجليزية الأكاديمية المتقدمة' },
-          ]);
-          setCourses([
-            { id: 'cccccccc-1111-4111-8111-111111111111', title: 'IELTS Academic Writing & Speaking Mastery', titleArabic: 'إتقان الكتابة والمحادثة الأكاديمية لاختبار الآيلتس' },
-            { id: 'cccccccc-2222-4222-8222-222222222222', title: 'English Grammar Foundations & Sentence Structure', titleArabic: 'أساسيات قواعد اللغة الإنجليزية وبناء الجملة السليمة' },
-          ]);
-          setLessons([
-            { id: '55555555-1111-4111-8111-111111111111', courseId: 'cccccccc-1111-4111-8111-111111111111', title: 'Lesson 1.1: Analyzing the Prompt & Generating Band 7 Ideas', titleArabic: 'الدرس 1.1: تحليل نص السؤال وتوليد الأفكار لدرجة 7+' },
-          ]);
-        }
-      } catch (err: any) {
-        console.error('Error loading session form options:', err);
+        if (grpRes.error) throwServiceError(grpRes.error, { service: 'SessionModal', operation: 'loadGroups' });
+        if (crsRes.error) throwServiceError(crsRes.error, { service: 'SessionModal', operation: 'loadCourses' });
+        if (lsnRes.error) throwServiceError(lsnRes.error, { service: 'SessionModal', operation: 'loadLessons' });
+
+        setGroups(
+          (grpRes.data || []).map((g) => ({
+            id: g.id,
+            name: g.name,
+            nameArabic: g.name_arabic || g.name,
+          }))
+        );
+        setCourses(
+          (crsRes.data || []).map((c) => ({
+            id: c.id,
+            title: c.title,
+            titleArabic: c.title_arabic || c.title,
+          }))
+        );
+        setLessons(
+          (lsnRes.data || []).map((l) => ({
+            id: l.id,
+            courseId: l.course_id,
+            title: l.title,
+            titleArabic: l.title_arabic || l.title,
+          }))
+        );
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, isRtl));
       } finally {
         setLoading(false);
       }
     }
 
     loadSelectOptions();
-  }, [isOpen]);
+  }, [isOpen, isRtl]);
 
   // Populate form for edit or reset for new session
   useEffect(() => {
@@ -183,7 +173,7 @@ export const SessionModal: React.FC<SessionModalProps> = ({
             if (link) setMeetingUrl(link);
           })
           .catch((err) => {
-            console.error('Could not fetch meeting link for editing:', err);
+            setError(getErrorMessage(err, isRtl));
           });
       }
     } else {
@@ -268,9 +258,8 @@ export const SessionModal: React.FC<SessionModalProps> = ({
       }
       onSuccess();
       onClose();
-    } catch (err: any) {
-      console.error('Failed to save session:', err);
-      setError(err.message || 'An error occurred while saving the live session');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, isRtl));
     } finally {
       setSaving(false);
     }

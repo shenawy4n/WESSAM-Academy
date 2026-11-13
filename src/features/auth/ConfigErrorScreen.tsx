@@ -9,13 +9,9 @@ import { getMissingSupabaseEnv } from '../../lib/supabase/client';
 import { BrandLogo } from '../../components/shared/BrandLogo';
 import { LanguageSwitcher } from '../../components/shared/LanguageSwitcher';
 import { Button } from '../../components/ui/Button';
-import { Database, AlertTriangle, Key, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Database, AlertTriangle, Key } from 'lucide-react';
 
-interface ConfigErrorScreenProps {
-  onBypassToPreview?: () => void;
-}
-
-export const ConfigErrorScreen: React.FC<ConfigErrorScreenProps> = ({ onBypassToPreview }) => {
+export const ConfigErrorScreen: React.FC = () => {
   const { t, isRtl } = useLocale();
   const missing = getMissingSupabaseEnv();
 
@@ -88,17 +84,6 @@ export const ConfigErrorScreen: React.FC<ConfigErrorScreenProps> = ({ onBypassTo
           >
             {t.configError.retryButton}
           </Button>
-
-          {onBypassToPreview && (
-            <Button
-              variant="outline"
-              onClick={onBypassToPreview}
-              className="w-full sm:w-auto text-[#14243A]"
-              icon={isRtl ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-            >
-              {isRtl ? 'معاينة واجهات المنصة التفاعلية (Phase 1)' : 'Inspect Phase 1 Interactive Shell'}
-            </Button>
-          )}
         </div>
       </main>
 

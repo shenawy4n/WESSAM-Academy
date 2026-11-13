@@ -29,6 +29,7 @@ import { Announcement, AnnouncementFormData, AnnouncementStatus } from './types'
 import { resolvePriorityBadge, formatNotificationTime } from './notificationUtils';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { AnnouncementModal } from './AnnouncementModal';
 
@@ -39,6 +40,8 @@ export const AnnouncementManagementView: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isProcessingSchedules, setIsProcessingSchedules] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [statusFilter, setStatusFilter] = useState<AnnouncementStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -48,11 +51,12 @@ export const AnnouncementManagementView: React.FC = () => {
 
   const loadData = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await notificationService.fetchAnnouncements(user?.id);
       setAnnouncements(data);
-    } catch {
-      // ignore
+    } catch (err) {
+      setLoadError(err);
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +77,9 @@ export const AnnouncementManagementView: React.FC = () => {
   };
 
   const handleSaveDraft = async (formData: AnnouncementFormData) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      throw new Error(isRtl ? 'يلزم تسجيل الدخول لحفظ الإعلان.' : 'Authenticated session required.');
+    }
     if (selectedAnnouncement) {
       await notificationService.updateAnnouncement(selectedAnnouncement.id, formData);
     } else {
@@ -83,7 +89,9 @@ export const AnnouncementManagementView: React.FC = () => {
   };
 
   const handlePublishNow = async (formData: AnnouncementFormData) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      throw new Error(isRtl ? 'يلزم تسجيل الدخول لنشر الإعلان.' : 'Authenticated session required.');
+    }
     let targetId = selectedAnnouncement?.id;
     if (!targetId) {
       const created = await notificationService.createAnnouncement(user.id, formData);
@@ -97,27 +105,45 @@ export const AnnouncementManagementView: React.FC = () => {
 
   const handlePublishExisting = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    await notificationService.publishAnnouncement(id);
-    await loadData();
+    setActionError(null);
+    try {
+      await notificationService.publishAnnouncement(id);
+      await loadData();
+    } catch (err) {
+      setActionError(err);
+    }
   };
 
   const handleArchive = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    await notificationService.archiveAnnouncement(id);
-    await loadData();
+    setActionError(null);
+    try {
+      await notificationService.archiveAnnouncement(id);
+      await loadData();
+    } catch (err) {
+      setActionError(err);
+    }
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    await notificationService.deleteAnnouncement(id);
-    await loadData();
+    setActionError(null);
+    try {
+      await notificationService.deleteAnnouncement(id);
+      await loadData();
+    } catch (err) {
+      setActionError(err);
+    }
   };
 
   const handleProcessDueSchedules = async () => {
     setIsProcessingSchedules(true);
+    setActionError(null);
     try {
       await notificationService.processScheduledAnnouncements();
       await loadData();
+    } catch (err) {
+      setActionError(err);
     } finally {
       setIsProcessingSchedules(false);
     }
@@ -267,6 +293,14 @@ export const AnnouncementManagementView: React.FC = () => {
 
       {/* Announcements List */}
       <div className="space-y-3.5">
+        {Boolean(actionError) && (
+          <ErrorState
+            variant="banner"
+            error={actionError}
+            isRtl={isRtl}
+            onDismiss={() => setActionError(null)}
+          />
+        )}
         {isLoading ? (
           <div className="py-16 flex flex-col items-center justify-center">
             <LoadingSpinner size="lg" />
@@ -274,6 +308,8 @@ export const AnnouncementManagementView: React.FC = () => {
               {isRtl ? 'جارِ تحميل الإعلانات...' : 'Loading announcements...'}
             </span>
           </div>
+        ) : loadError ? (
+          <ErrorState error={loadError} isRtl={isRtl} onRetry={loadData} />
         ) : filteredAnnouncements.length === 0 ? (
           <EmptyState
             icon={<Megaphone className="w-6 h-6 text-[#356AE6]" />}

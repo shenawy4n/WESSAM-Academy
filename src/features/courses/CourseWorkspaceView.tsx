@@ -32,6 +32,8 @@ import {
 import { fetchGroups, GroupRecord } from '../groups/groupService';
 import { SafeVideoPlayer } from './SafeVideoPlayer';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { getErrorMessage } from '../../lib/errors/serviceError';
 import {
   ArrowLeft,
   ArrowRight,
@@ -79,6 +81,7 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
 
   const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
   const [previewLesson, setPreviewLesson] = useState<LessonRecord | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -125,6 +128,8 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
   const loadData = async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
+      setErrorMessage(null);
       const [curric, groupsAssigned, allGroups] = await Promise.all([
         fetchCourseCurriculum(courseId),
         fetchCourseAssignedGroups(courseId),
@@ -150,8 +155,9 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
       setSettingsDescAr(curric.course.descriptionArabic || '');
       setSettingsLevel(curric.course.level);
       setSettingsCoverUrl(curric.course.coverImageUrl || '');
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to load curriculum');
+    } catch (err: unknown) {
+      setLoadError(err);
+      setErrorMessage(getErrorMessage(err, isRtl));
     } finally {
       setIsLoading(false);
     }
@@ -402,14 +408,14 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
     }
   };
 
-  const handleDownloadResource = async (resourceId: string, fallbackUrl: string) => {
+  const handleDownloadResource = async (resourceId: string) => {
     try {
+      setErrorMessage(null);
       setDownloadingResourceId(resourceId);
       const url = await getLessonResourceDownloadUrl(resourceId);
       window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (err: any) {
-      console.warn('Failed to get signed resource URL, falling back to stored URL', err);
-      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, isRtl));
     } finally {
       setDownloadingResourceId(null);
     }
@@ -498,14 +504,21 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
 
   if (!course) {
     return (
-      <div className="p-8 text-center text-slate-500">
-        <p>{isRtl ? 'لم يتم العثور على المقرر الدراسي' : 'Course not found'}</p>
+      <div className="space-y-4">
         <button
           onClick={onBack}
-          className="mt-4 px-4 py-2 bg-[#356AE6] text-white rounded-xl text-xs font-semibold"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
         >
-          {t.common.back}
+          {isRtl ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
+          <span>{t.common.back}</span>
         </button>
+        {loadError ? (
+          <ErrorState error={loadError} isRtl={isRtl} onRetry={loadData} />
+        ) : (
+          <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
+            <p>{isRtl ? 'لم يتم العثور على المقرر الدراسي' : 'Course not found'}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -844,7 +857,7 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
                                           </span>
                                           <button
                                             type="button"
-                                            onClick={() => handleDownloadResource(res.id, res.fileUrl)}
+                                            onClick={() => handleDownloadResource(res.id)}
                                             disabled={downloadingResourceId === res.id}
                                             className="text-[#356AE6] hover:text-[#2855BE] cursor-pointer"
                                             title={isRtl ? 'تحميل الرابط الآمن' : 'Download signed link'}

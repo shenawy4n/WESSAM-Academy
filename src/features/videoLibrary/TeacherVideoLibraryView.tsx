@@ -19,6 +19,7 @@ import { VideoPlayerModal } from './VideoPlayerModal';
 import { VideoStatsModal } from './VideoStatsModal';
 import { ResourceManagementModal } from './ResourceManagementModal';
 import { fetchTeacherCourses } from '../courses/coursesService';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   Video,
   Plus,
@@ -49,6 +50,8 @@ export const TeacherVideoLibraryView: React.FC = () => {
   const [videos, setVideos] = useState<VideoAssetRecord[]>([]);
   const [courses, setCourses] = useState<{ id: string; name: string; nameArabic?: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<VideoStatus | 'all'>('all');
   const [courseFilter, setCourseFilter] = useState<string>('');
@@ -68,6 +71,7 @@ export const TeacherVideoLibraryView: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const [vids, crs] = await Promise.all([
         fetchTeacherVideos({
           searchQuery,
@@ -85,8 +89,8 @@ export const TeacherVideoLibraryView: React.FC = () => {
           nameArabic: c.titleArabic,
         }))
       );
-    } catch (err: any) {
-      console.error('Failed to load teacher video library:', err);
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -98,14 +102,15 @@ export const TeacherVideoLibraryView: React.FC = () => {
 
   const handleTogglePublish = async (vid: VideoAssetRecord) => {
     try {
+      setActionError(null);
       if (vid.status === 'published') {
         await unpublishVideo(vid.id);
       } else {
         await publishVideo(vid.id);
       }
       await loadData();
-    } catch (err: any) {
-      alert(err.message || 'Operation failed');
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -120,10 +125,11 @@ export const TeacherVideoLibraryView: React.FC = () => {
       return;
     }
     try {
+      setActionError(null);
       await archiveVideo(vid.id);
       await loadData();
-    } catch (err: any) {
-      alert(err.message || 'Failed to archive video');
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -131,6 +137,7 @@ export const TeacherVideoLibraryView: React.FC = () => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= videos.length) return;
 
+    const previousVideos = videos;
     const reordered = [...videos];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(targetIndex, 0, moved);
@@ -139,9 +146,11 @@ export const TeacherVideoLibraryView: React.FC = () => {
     const activeCourseId = moved.courseId || courseFilter;
     if (activeCourseId) {
       try {
+        setActionError(null);
         await reorderVideos(activeCourseId, reordered.map((v) => v.id));
-      } catch (err) {
-        console.warn('Reorder sync error:', err);
+      } catch (err: unknown) {
+        setVideos(previousVideos);
+        setActionError(err);
       }
     }
   };
@@ -288,12 +297,24 @@ export const TeacherVideoLibraryView: React.FC = () => {
         </div>
       </div>
 
+      {/* Action Error Banner */}
+      {Boolean(actionError) && (
+        <ErrorState
+          variant="banner"
+          error={actionError}
+          isRtl={isRtl}
+          onDismiss={() => setActionError(null)}
+        />
+      )}
+
       {/* Videos List Container */}
       <div className="space-y-3">
         {loading ? (
           <div className="p-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
             {isRtl ? 'جاري تحميل الفيديوهات...' : 'Loading video library...'}
           </div>
+        ) : loadError ? (
+          <ErrorState error={loadError} isRtl={isRtl} onRetry={loadData} />
         ) : videos.length === 0 ? (
           <div className="p-12 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 space-y-3">
             <Video className="w-12 h-12 text-slate-300 mx-auto" />

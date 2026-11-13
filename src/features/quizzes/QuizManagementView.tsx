@@ -28,20 +28,22 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { useLocale } from '../../hooks/useLocale';
 import { QuizRecord } from './types';
 import { fetchTeacherQuizzes, updateQuiz, deleteQuiz } from './quizService';
 import { QuizModal } from './QuizModal';
 import { QuizQuestionBuilderModal } from './QuizQuestionBuilderModal';
 import { QuizSubmissionsModal } from './QuizSubmissionsModal';
-import { supabase } from '../../lib/supabase/client';
+import { requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 
 export const QuizManagementView: React.FC = () => {
   const { isRtl } = useLocale();
 
   const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -65,25 +67,31 @@ export const QuizManagementView: React.FC = () => {
   // Load filter options
   useEffect(() => {
     async function loadFilterData() {
-      if (!supabase) {
-        setGroups([
-          { id: 'aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc', name: 'Group A - Intensive IELTS Prep', nameArabic: 'المجموعة أ - الإعداد المكثف للآيلتس' },
-        ]);
-        setCourses([
-          { id: 'cccccccc-1111-4111-8111-111111111111', title: 'IELTS Academic Writing & Speaking Mastery', titleArabic: 'إتقان الكتابة والمحادثة الأكاديمية لاختبار الآيلتس' },
-          { id: 'cccccccc-2222-4222-8222-222222222222', title: 'English Grammar Foundations & Sentence Structure', titleArabic: 'أساسيات قواعد اللغة الإنجليزية وبناء الجملة السليمة' },
-        ]);
-        return;
-      }
       try {
-        const [{ data: gList }, { data: cList }] = await Promise.all([
-          supabase.from('groups').select('id, name, name_arabic').eq('is_active', true).order('name'),
-          supabase.from('courses').select('id, title, title_arabic').order('title'),
+        const client = requireSupabaseClient({
+          service: 'quizManagementView',
+          operation: 'loadFilterData',
+        });
+        const [{ data: gList, error: gErr }, { data: cList, error: cErr }] = await Promise.all([
+          client.from('groups').select('id, name, name_arabic').eq('is_active', true).order('name'),
+          client.from('courses').select('id, title, title_arabic').order('title'),
         ]);
-        if (gList) setGroups(gList.map((g: any) => ({ id: g.id, name: g.name, nameArabic: g.name_arabic || g.name })));
-        if (cList) setCourses(cList.map((c: any) => ({ id: c.id, title: c.title, titleArabic: c.title_arabic || c.title })));
-      } catch (err) {
-        console.error('Error loading filter data:', err);
+        if (gErr) {
+          throwServiceError(gErr, {
+            service: 'quizManagementView',
+            operation: 'loadFilterData.groups',
+          });
+        }
+        if (cErr) {
+          throwServiceError(cErr, {
+            service: 'quizManagementView',
+            operation: 'loadFilterData.courses',
+          });
+        }
+        setGroups((gList || []).map((g: any) => ({ id: g.id, name: g.name, nameArabic: g.name_arabic || g.name })));
+        setCourses((cList || []).map((c: any) => ({ id: c.id, title: c.title, titleArabic: c.title_arabic || c.title })));
+      } catch (err: unknown) {
+        setActionError(err);
       }
     }
     loadFilterData();
@@ -92,7 +100,7 @@ export const QuizManagementView: React.FC = () => {
   const loadQuizzes = async () => {
     try {
       setLoading(true);
-      setError(null);
+      setLoadError(null);
       const data = await fetchTeacherQuizzes({
         groupId: selectedGroup,
         courseId: selectedCourse,
@@ -100,9 +108,8 @@ export const QuizManagementView: React.FC = () => {
         search: searchQuery,
       });
       setQuizzes(data);
-    } catch (err: any) {
-      console.error('Failed to load quizzes:', err);
-      setError(err.message || 'Error loading quizzes');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -114,10 +121,11 @@ export const QuizManagementView: React.FC = () => {
 
   const handleTogglePublish = async (quiz: QuizRecord) => {
     try {
+      setActionError(null);
       await updateQuiz(quiz.id, { isPublished: !quiz.isPublished });
-      loadQuizzes();
-    } catch (err: any) {
-      alert(err.message || 'Failed to toggle publish status');
+      await loadQuizzes();
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -132,10 +140,11 @@ export const QuizManagementView: React.FC = () => {
     if (!window.confirm(confirmMsg)) return;
 
     try {
+      setActionError(null);
       await updateQuiz(quiz.id, { isArchived: !quiz.isArchived });
-      loadQuizzes();
-    } catch (err: any) {
-      alert(err.message || 'Failed to toggle archive');
+      await loadQuizzes();
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -146,10 +155,11 @@ export const QuizManagementView: React.FC = () => {
     if (!window.confirm(confirmMsg)) return;
 
     try {
+      setActionError(null);
       await deleteQuiz(quiz.id);
-      loadQuizzes();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete quiz');
+      await loadQuizzes();
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -277,16 +287,22 @@ export const QuizManagementView: React.FC = () => {
         </div>
       </Card>
 
+      {Boolean(actionError) && (
+        <ErrorState
+          variant="banner"
+          error={actionError}
+          isRtl={isRtl}
+          onDismiss={() => setActionError(null)}
+        />
+      )}
+
       {/* Assessment List */}
       {loading ? (
         <div className="py-16 flex justify-center">
           <LoadingSpinner size="lg" />
         </div>
-      ) : error ? (
-        <Card className="p-8 text-center text-rose-600 bg-rose-50/50">
-          <AlertCircle className="w-8 h-8 mx-auto mb-2 text-rose-500" />
-          <p className="font-semibold text-sm">{error}</p>
-        </Card>
+      ) : loadError ? (
+        <ErrorState error={loadError} isRtl={isRtl} onRetry={loadQuizzes} />
       ) : quizzes.length === 0 ? (
         <EmptyState
           icon={<FileQuestion className="w-6 h-6 text-[#356AE6]" />}

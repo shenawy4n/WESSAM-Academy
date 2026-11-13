@@ -33,6 +33,7 @@ import { formatAssignmentDateTime, getAssignmentDeadlineStatus } from './assignm
 import { AssignmentModal } from './AssignmentModal';
 import { GradingWorkspaceModal } from './GradingWorkspaceModal';
 import { fetchTeacherCourses } from '../courses/coursesService';
+import { ErrorState } from '../../components/ui/ErrorState';
 
 interface TeacherAssignmentsViewProps {
   initialTab?: 'all' | 'grading';
@@ -47,7 +48,8 @@ export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [schemaReady, setSchemaReady] = useState<boolean>(true);
 
   // Modals
@@ -58,7 +60,7 @@ export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
   const loadData = async () => {
     try {
       setLoading(true);
-      setActionError(null);
+      setLoadError(null);
       const [assigns, courseList] = await Promise.all([
         fetchTeacherAssignments({
           courseId: selectedCourseId || undefined,
@@ -70,9 +72,8 @@ export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
       setAssignments(assigns);
       setCourses(courseList || []);
       setSchemaReady(isAssignmentsPhase5CSchemaReady());
-    } catch (err: any) {
-      console.error('Failed to load assignments:', err);
-      setActionError(err.message || 'فشل جلب قائمة الواجبات');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -91,10 +92,11 @@ export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
   // Duplicate handler
   const handleDuplicate = async (id: string) => {
     try {
+      setActionError(null);
       await duplicateAssignment(id);
       await loadData();
-    } catch (err: any) {
-      setActionError(err.message || 'فشل نسخ الواجب');
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -102,10 +104,11 @@ export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
   const handleArchive = async (id: string) => {
     if (!window.confirm('هل أنت متأكد من أرشفة هذا الواجب؟ سيتم إخفاؤه عن الطلاب دون حذف البيانات.')) return;
     try {
+      setActionError(null);
       await deleteOrArchiveAssignment(id, true);
       await loadData();
-    } catch (err: any) {
-      setActionError(err.message || 'فشل أرشفة الواجب');
+    } catch (err: unknown) {
+      setActionError(err);
     }
   };
 
@@ -188,11 +191,13 @@ export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
       )}
 
       {/* Error alert */}
-      {actionError && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{actionError}</span>
-        </div>
+      {Boolean(actionError) && (
+        <ErrorState
+          variant="banner"
+          error={actionError}
+          isRtl={true}
+          onDismiss={() => setActionError(null)}
+        />
       )}
 
       {/* Filter and Search Bar */}
@@ -240,6 +245,10 @@ export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
       <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-xs text-slate-400">جارٍ جلب الواجبات والتطبيقات...</div>
+        ) : loadError ? (
+          <div className="p-6">
+            <ErrorState error={loadError} isRtl={true} onRetry={loadData} />
+          </div>
         ) : assignments.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
             <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300" />

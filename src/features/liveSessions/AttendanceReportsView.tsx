@@ -19,19 +19,21 @@ import {
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { useLocale } from '../../hooks/useLocale';
 import {
   AttendanceReportData,
   fetchGroupAttendanceReport,
 } from './liveSessionsService';
-import { supabase } from '../../lib/supabase/client';
+import { requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 
 export const AttendanceReportsView: React.FC = () => {
   const { isRtl } = useLocale();
 
   const [report, setReport] = useState<AttendanceReportData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [filterError, setFilterError] = useState<unknown>(null);
 
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
@@ -41,19 +43,28 @@ export const AttendanceReportsView: React.FC = () => {
   useEffect(() => {
     async function loadGroups() {
       try {
-        if (supabase) {
-          const { data } = await supabase
-            .from('groups')
-            .select('id, name, name_arabic')
-            .order('name');
-          setGroups((data || []).map((g) => ({
-            id: g.id,
-            name: g.name,
-            nameArabic: g.name_arabic || g.name,
-          })));
+        setFilterError(null);
+        const client = requireSupabaseClient({
+          service: 'attendanceReportsView',
+          operation: 'loadGroups',
+        });
+        const { data, error: grpErr } = await client
+          .from('groups')
+          .select('id, name, name_arabic')
+          .order('name');
+        if (grpErr) {
+          throwServiceError(grpErr, {
+            service: 'attendanceReportsView',
+            operation: 'loadGroups',
+          });
         }
-      } catch (err) {
-        console.error('Error loading groups for report:', err);
+        setGroups((data || []).map((g) => ({
+          id: g.id,
+          name: g.name,
+          nameArabic: g.name_arabic || g.name,
+        })));
+      } catch (err: unknown) {
+        setFilterError(err);
       }
     }
     loadGroups();
@@ -62,16 +73,15 @@ export const AttendanceReportsView: React.FC = () => {
   const loadReport = async () => {
     try {
       setLoading(true);
-      setError(null);
+      setLoadError(null);
       const data = await fetchGroupAttendanceReport(
         selectedGroup,
         dateFrom ? new Date(dateFrom).toISOString() : undefined,
         dateTo ? new Date(dateTo + 'T23:59:59.999Z').toISOString() : undefined
       );
       setReport(data);
-    } catch (err: any) {
-      console.error('Failed to load attendance report:', err);
-      setError(err.message || 'Error loading attendance report');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -190,6 +200,15 @@ export const AttendanceReportsView: React.FC = () => {
         </div>
       </Card>
 
+      {Boolean(filterError) && (
+        <ErrorState
+          variant="banner"
+          error={filterError}
+          isRtl={isRtl}
+          onDismiss={() => setFilterError(null)}
+        />
+      )}
+
       {/* Aggregate Metrics Bar */}
       {report && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -249,11 +268,8 @@ export const AttendanceReportsView: React.FC = () => {
               <LoadingSpinner size="md" />
               <span>{isRtl ? 'جاري تجميع وحساب بيانات الحضور...' : 'Calculating attendance metrics...'}</span>
             </div>
-          ) : error ? (
-            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
+          ) : loadError ? (
+            <ErrorState error={loadError} isRtl={isRtl} onRetry={loadReport} />
           ) : !report || report.studentSummaries.length === 0 ? (
             <div className="py-12 text-center text-xs text-slate-500">
               {isRtl

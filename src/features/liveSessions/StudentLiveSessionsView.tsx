@@ -9,7 +9,9 @@ import { useAuth } from '../auth/AuthContext';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ServiceError } from '../../lib/errors/serviceError';
 import {
   fetchStudentLiveSessions,
   fetchStudentAttendanceHistory,
@@ -47,29 +49,30 @@ export const StudentLiveSessionsView: React.FC = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [joiningId, setJoiningId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [joinError, setJoinError] = useState<unknown>(null);
+
+  const loadData = async () => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const [sessionList, attendanceList] = await Promise.all([
+        fetchStudentLiveSessions(),
+        fetchStudentAttendanceHistory(),
+      ]);
+      setSessions(sessionList);
+      setAttendanceRecords(attendanceList);
+    } catch (err: unknown) {
+      setLoadError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function loadData() {
-      if (!user) return;
-      try {
-        setLoading(true);
-        setError(null);
-        const [sessionList, attendanceList] = await Promise.all([
-          fetchStudentLiveSessions(),
-          fetchStudentAttendanceHistory(),
-        ]);
-        setSessions(sessionList);
-        setAttendanceRecords(attendanceList);
-      } catch (err: unknown) {
-        console.error('Failed to load student live sessions:', err);
-        setError(isRtl ? 'تعذر تحميل بيانات الحصص المباشرة' : 'Failed to load live sessions');
-      } finally {
-        setLoading(false);
-      }
-    }
     loadData();
-  }, [user, isRtl]);
+  }, [user]);
 
   const upcomingSessions = sessions.filter(
     (s) => s.status === 'scheduled' || isSessionUpcoming(s.startTime) || isSessionLive(s.startTime, s.durationMinutes)
@@ -82,16 +85,20 @@ export const StudentLiveSessionsView: React.FC = () => {
   const handleJoinClass = async (sessionId: string) => {
     try {
       setJoiningId(sessionId);
-      setError(null);
+      setJoinError(null);
       const link = await getAuthorizedMeetingLink(sessionId);
       if (link) {
         window.open(link, '_blank', 'noopener,noreferrer');
       } else {
-        setError(isRtl ? 'رابط الحصة غير متوفر حالياً' : 'Meeting link is not available yet');
+        throw new ServiceError({
+          category: 'NOT_FOUND',
+          message: isRtl ? 'رابط الحصة غير متوفر حالياً' : 'Meeting link is not available yet',
+          service: 'studentLiveSessionsView',
+          operation: 'handleJoinClass',
+        });
       }
     } catch (err: unknown) {
-      console.error('Failed to retrieve authorized meeting link:', err);
-      setError(isRtl ? 'غير مصرح لك بالوصول لرابط هذه الحصة' : 'Unauthorized to access this meeting link');
+      setJoinError(err);
     } finally {
       setJoiningId(null);
     }
@@ -179,13 +186,19 @@ export const StudentLiveSessionsView: React.FC = () => {
         </div>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
+      {Boolean(joinError) && (
+        <ErrorState
+          variant="banner"
+          error={joinError}
+          isRtl={isRtl}
+          onDismiss={() => setJoinError(null)}
+        />
       )}
 
+      {loadError ? (
+        <ErrorState error={loadError} isRtl={isRtl} onRetry={loadData} />
+      ) : (
+        <>
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
         <button
@@ -470,6 +483,8 @@ export const StudentLiveSessionsView: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+      )}
+        </>
       )}
     </div>
   );

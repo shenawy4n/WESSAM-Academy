@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocale } from '../../hooks/useLocale';
 import { useAuth } from '../auth/AuthContext';
-import { supabase } from '../../lib/supabase/client';
+import { requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   Users,
   FolderGit2,
@@ -52,6 +53,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   const { t, isRtl } = useLocale();
   const { user } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<unknown>(null);
   const [metrics, setMetrics] = useState<MetricCount>({
     totalStudents: 0,
     activeStudents: 0,
@@ -62,87 +64,83 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   });
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionItem[]>([]);
 
-  useEffect(() => {
-    async function loadMetrics() {
-      if (!supabase) {
-        setMetrics({
-          totalStudents: 3,
-          activeStudents: 3,
-          totalGroups: 3,
-          activeCourses: 2,
-          upcomingLiveClasses: 0,
-          pendingReviews: 0,
-        });
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        // Query actual counts and upcoming live sessions from PostgreSQL
-        const [
-          { count: studentsCount },
-          { count: activeStudentsCount },
-          { count: groupsCount },
-          { count: coursesCount },
-          { count: liveCount },
-          { count: submissionsCount },
-          { data: sessionRows },
-        ] = await Promise.all([
-          supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
-          supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('status', 'active'),
-          supabase.from('groups').select('id', { count: 'exact', head: true }),
-          supabase.from('courses').select('id', { count: 'exact', head: true }).eq('is_published', true),
-          supabase.from('live_sessions').select('id', { count: 'exact', head: true }).eq('status', 'scheduled'),
-          supabase.from('submissions').select('id', { count: 'exact', head: true }).is('graded_at', null),
-          supabase
-            .from('live_sessions')
-            .select(`
-              id,
-              title,
-              title_arabic,
-              start_time,
-              duration_minutes,
-              provider,
-              groups:group_id (
-                name,
-                name_arabic
-              )
-            `)
-            .eq('status', 'scheduled')
-            .order('start_time', { ascending: true })
-            .limit(3),
-        ]);
+  const loadMetrics = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const client = requireSupabaseClient({ service: 'TeacherDashboard', operation: 'loadMetrics' });
+      const [
+        studentsRes,
+        activeStudentsRes,
+        groupsRes,
+        coursesRes,
+        liveRes,
+        submissionsRes,
+        sessionsRes,
+      ] = await Promise.all([
+        client.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
+        client.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('status', 'active'),
+        client.from('groups').select('id', { count: 'exact', head: true }),
+        client.from('courses').select('id', { count: 'exact', head: true }).eq('is_published', true),
+        client.from('live_sessions').select('id', { count: 'exact', head: true }).eq('status', 'scheduled'),
+        client.from('submissions').select('id', { count: 'exact', head: true }).is('graded_at', null),
+        client
+          .from('live_sessions')
+          .select(`
+            id,
+            title,
+            title_arabic,
+            start_time,
+            duration_minutes,
+            provider,
+            groups:group_id (
+              name,
+              name_arabic
+            )
+          `)
+          .eq('status', 'scheduled')
+          .order('start_time', { ascending: true })
+          .limit(3),
+      ]);
 
-        setMetrics({
-          totalStudents: studentsCount || 0,
-          activeStudents: activeStudentsCount || 0,
-          totalGroups: groupsCount || 0,
-          activeCourses: coursesCount || 0,
-          upcomingLiveClasses: liveCount || 0,
-          pendingReviews: submissionsCount || 0,
-        });
+      if (studentsRes.error) throwServiceError(studentsRes.error, { service: 'TeacherDashboard', operation: 'countStudents' });
+      if (activeStudentsRes.error) throwServiceError(activeStudentsRes.error, { service: 'TeacherDashboard', operation: 'countActiveStudents' });
+      if (groupsRes.error) throwServiceError(groupsRes.error, { service: 'TeacherDashboard', operation: 'countGroups' });
+      if (coursesRes.error) throwServiceError(coursesRes.error, { service: 'TeacherDashboard', operation: 'countCourses' });
+      if (liveRes.error) throwServiceError(liveRes.error, { service: 'TeacherDashboard', operation: 'countLiveSessions' });
+      if (submissionsRes.error) throwServiceError(submissionsRes.error, { service: 'TeacherDashboard', operation: 'countPendingSubmissions' });
+      if (sessionsRes.error) throwServiceError(sessionsRes.error, { service: 'TeacherDashboard', operation: 'fetchUpcomingSessions' });
 
-        if (sessionRows) {
-          const mapped: UpcomingSessionItem[] = sessionRows.map((r: any) => ({
-            id: r.id,
-            title: r.title,
-            title_arabic: r.title_arabic,
-            start_time: r.start_time,
-            duration_minutes: r.duration_minutes || 60,
-            provider: r.provider,
-            group_name: r.groups?.name,
-            group_name_arabic: r.groups?.name_arabic,
-          }));
-          setUpcomingSessions(mapped);
-        }
-      } catch (err) {
-        console.error('Failed to query metrics from database:', err);
-      } finally {
-        setLoading(false);
-      }
+      setMetrics({
+        totalStudents: studentsRes.count ?? 0,
+        activeStudents: activeStudentsRes.count ?? 0,
+        totalGroups: groupsRes.count ?? 0,
+        activeCourses: coursesRes.count ?? 0,
+        upcomingLiveClasses: liveRes.count ?? 0,
+        pendingReviews: submissionsRes.count ?? 0,
+      });
+
+      const mapped: UpcomingSessionItem[] = (sessionsRes.data || []).map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        title_arabic: r.title_arabic,
+        start_time: r.start_time,
+        duration_minutes: r.duration_minutes || 60,
+        provider: r.provider,
+        group_name: r.groups?.name,
+        group_name_arabic: r.groups?.name_arabic,
+      }));
+      setUpcomingSessions(mapped);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-    loadMetrics();
   }, []);
+
+  useEffect(() => {
+    loadMetrics();
+  }, [loadMetrics]);
 
   const metricCards = [
     {
@@ -227,6 +225,16 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
         </div>
       </div>
 
+      {/* Error Banner when dashboard metrics fail to load */}
+      {Boolean(error) && (
+        <ErrorState
+          variant="banner"
+          error={error}
+          isRtl={isRtl}
+          onRetry={loadMetrics}
+        />
+      )}
+
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {metricCards.map((card, i) => {
@@ -241,7 +249,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
                 <div>
                   <p className="text-xs font-medium text-slate-500">{card.title}</p>
                   <h4 className="text-2xl font-bold text-[#14243A] mt-1 tracking-tight">
-                    {loading ? '—' : card.value}
+                    {loading ? '—' : error ? '!' : card.value}
                   </h4>
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1 font-medium">
                     <span>{card.subtext}</span>
@@ -276,7 +284,9 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               }
             />
             <CardContent>
-              {upcomingSessions.length === 0 ? (
+              {error ? (
+                <ErrorState error={error} isRtl={isRtl} onRetry={loadMetrics} />
+              ) : upcomingSessions.length === 0 ? (
                 <EmptyState
                   icon={<Radio className="w-6 h-6 text-slate-400" />}
                   title={t.teacherDashboard.noUpcomingClasses}
@@ -344,13 +354,35 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               }
             />
             <CardContent>
-              {metrics.pendingReviews === 0 ? (
+              {error ? (
+                <ErrorState error={error} isRtl={isRtl} onRetry={loadMetrics} />
+              ) : metrics.pendingReviews === 0 ? (
                 <EmptyState
                   icon={<ClipboardList className="w-6 h-6 text-slate-400" />}
                   title={t.teacherDashboard.noPendingAssignments}
                   description={isRtl ? 'لا توجد تسليمات معلقة تتطلب التدقيق في الوقت الحالي.' : 'All submitted assignments and quizzes are currently evaluated.'}
                 />
-              ) : null}
+              ) : (
+                <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-amber-50/70 border border-amber-200">
+                  <div>
+                    <p className="text-sm font-bold text-amber-900">
+                      {isRtl
+                        ? `${metrics.pendingReviews} تسليم بانتظار التقييم`
+                        : `${metrics.pendingReviews} submissions awaiting grading`}
+                    </p>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      {isRtl ? 'انتقل إلى مركز التصحيح لمراجعة أعمال الطلاب ورصد الدرجات.' : 'Open the grading desk to review student submissions and assign grades.'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => onNavigate('submissions')}
+                  >
+                    {isRtl ? 'فتح التصحيح' : 'Review'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

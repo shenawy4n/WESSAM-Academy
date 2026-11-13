@@ -1,4 +1,13 @@
-import { supabase } from '../../lib/supabase/client';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {
+  requireSupabaseClient,
+  throwServiceError,
+  ServiceError,
+} from '../../lib/errors/serviceError';
 import {
   QuestionBankItem,
   QuestionOptionItem,
@@ -28,9 +37,8 @@ export interface UpdateQuestionPayload extends CreateQuestionPayload {
   id: string;
 }
 
-/**
- * Normalizes difficulty level string from DB representation to UI representation.
- */
+const SERVICE = 'questionBankService';
+
 function normalizeDifficulty(diff: string | null | undefined): DifficultyLevel {
   if (!diff) return 'medium';
   const lower = diff.toLowerCase();
@@ -39,20 +47,10 @@ function normalizeDifficulty(diff: string | null | undefined): DifficultyLevel {
   return 'medium';
 }
 
-/**
- * Converts UI difficulty to DB difficulty level value.
- */
 function toDbDifficulty(diff: DifficultyLevel): string {
   if (diff === 'medium') return 'intermediate';
   if (diff === 'hard') return 'advanced';
   return 'easy';
-}
-
-function ensureClient() {
-  if (!supabase) {
-    throw new Error('Supabase client is not initialized');
-  }
-  return supabase;
 }
 
 /**
@@ -61,7 +59,10 @@ function ensureClient() {
  * Returns empty array [] if no questions exist.
  */
 export async function fetchQuestionBankItems(includeArchived = false): Promise<QuestionBankItem[]> {
-  const client = ensureClient();
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'fetchQuestionBankItems',
+  });
 
   let query = client
     .from('question_bank')
@@ -76,13 +77,23 @@ export async function fetchQuestionBankItems(includeArchived = false): Promise<Q
     query = query.eq('is_active', true);
   }
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(`Failed to fetch questions: ${error.message}`);
+  let res;
+  try {
+    res = await query;
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'fetchQuestionBankItems' });
   }
 
-  if (!data || data.length === 0) {
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'fetchQuestionBankItems',
+      fallbackMessage: 'Failed to fetch question bank items',
+    });
+  }
+
+  const data = res.data || [];
+  if (data.length === 0) {
     return [];
   }
 
@@ -97,17 +108,29 @@ export async function fetchQuestionBankItems(includeArchived = false): Promise<Q
 
 /**
  * Fetch aggregated statistics for question bank via RPC.
- * Throws backend error if RPC fails.
  */
 export async function fetchQuestionBankStats(): Promise<QuestionBankStats> {
-  const client = ensureClient();
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'fetchQuestionBankStats',
+  });
 
-  const { data, error } = await client.rpc('get_question_bank_stats');
-  if (error) {
-    throw new Error(`Failed to fetch question bank stats: ${error.message}`);
+  let res;
+  try {
+    res = await client.rpc('get_question_bank_stats');
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'fetchQuestionBankStats' });
   }
 
-  const raw = data || {};
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'fetchQuestionBankStats',
+      fallbackMessage: 'Failed to fetch question bank statistics',
+    });
+  }
+
+  const raw = res.data || {};
   const by_type: Record<QuestionType, number> = {
     multiple_choice: 0,
     multiple_select: 0,
@@ -137,10 +160,12 @@ export async function fetchQuestionBankStats(): Promise<QuestionBankStats> {
 
 /**
  * Create a new question with its options atomically via RPC.
- * Strictly calls create_question_bank_item with p_question & p_options JSONB payloads.
  */
 export async function createQuestionBankItem(payload: CreateQuestionPayload): Promise<string> {
-  const client = ensureClient();
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'createQuestionBankItem',
+  });
 
   const questionPayload = {
     question_text: payload.question_text.trim(),
@@ -169,28 +194,44 @@ export async function createQuestionBankItem(payload: CreateQuestionPayload): Pr
     metadata: opt.metadata || {},
   }));
 
-  const { data, error } = await client.rpc('create_question_bank_item', {
-    p_question: questionPayload,
-    p_options: optionsPayload,
-  });
-
-  if (error) {
-    throw new Error(error.message);
+  let res;
+  try {
+    res = await client.rpc('create_question_bank_item', {
+      p_question: questionPayload,
+      p_options: optionsPayload,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'createQuestionBankItem' });
   }
 
-  if (!data || !data.id) {
-    throw new Error('Failed to create question: Server returned empty response');
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'createQuestionBankItem',
+      fallbackMessage: 'Failed to create question',
+    });
   }
 
-  return data.id as string;
+  if (!res.data || !res.data.id) {
+    throw new ServiceError({
+      category: 'DATABASE_ERROR',
+      message: 'Failed to create question: Server returned empty response.',
+      service: SERVICE,
+      operation: 'createQuestionBankItem',
+    });
+  }
+
+  return res.data.id as string;
 }
 
 /**
  * Update an existing question and its options atomically via RPC.
- * Strictly calls update_question_bank_item with p_question_id, p_question, p_options.
  */
 export async function updateQuestionBankItem(payload: UpdateQuestionPayload): Promise<void> {
-  const client = ensureClient();
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'updateQuestionBankItem',
+  });
 
   const questionPayload = {
     question_text: payload.question_text.trim(),
@@ -219,14 +260,23 @@ export async function updateQuestionBankItem(payload: UpdateQuestionPayload): Pr
     metadata: opt.metadata || {},
   }));
 
-  const { error } = await client.rpc('update_question_bank_item', {
-    p_question_id: payload.id,
-    p_question: questionPayload,
-    p_options: optionsPayload,
-  });
+  let res;
+  try {
+    res = await client.rpc('update_question_bank_item', {
+      p_question_id: payload.id,
+      p_question: questionPayload,
+      p_options: optionsPayload,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'updateQuestionBankItem' });
+  }
 
-  if (error) {
-    throw new Error(error.message);
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'updateQuestionBankItem',
+      fallbackMessage: 'Failed to update question',
+    });
   }
 }
 
@@ -234,19 +284,36 @@ export async function updateQuestionBankItem(payload: UpdateQuestionPayload): Pr
  * Duplicate a question item creating an independent copy with (Copy) title via RPC.
  */
 export async function duplicateQuestionBankItem(questionId: string): Promise<string> {
-  const client = ensureClient();
-
-  const { data, error } = await client.rpc('duplicate_question_bank_item', {
-    p_question_id: questionId,
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'duplicateQuestionBankItem',
   });
 
-  if (error) {
-    throw new Error(error.message);
+  let res;
+  try {
+    res = await client.rpc('duplicate_question_bank_item', {
+      p_question_id: questionId,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'duplicateQuestionBankItem' });
   }
 
-  const newId = data?.new_question_id;
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'duplicateQuestionBankItem',
+      fallbackMessage: 'Failed to duplicate question',
+    });
+  }
+
+  const newId = res.data?.new_question_id;
   if (!newId) {
-    throw new Error('Server did not return the new question identifier');
+    throw new ServiceError({
+      category: 'DATABASE_ERROR',
+      message: 'Server did not return the new question identifier.',
+      service: SERVICE,
+      operation: 'duplicateQuestionBankItem',
+    });
   }
 
   return newId as string;
@@ -257,17 +324,29 @@ export async function duplicateQuestionBankItem(questionId: string): Promise<str
  */
 export async function archiveQuestionBankItems(questionIds: string[]): Promise<number> {
   if (questionIds.length === 0) return 0;
-  const client = ensureClient();
-
-  const { data, error } = await client.rpc('archive_question_bank_items', {
-    p_question_ids: questionIds,
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'archiveQuestionBankItems',
   });
 
-  if (error) {
-    throw new Error(error.message);
+  let res;
+  try {
+    res = await client.rpc('archive_question_bank_items', {
+      p_question_ids: questionIds,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'archiveQuestionBankItems' });
   }
 
-  return Number(data?.archived_count ?? 0);
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'archiveQuestionBankItems',
+      fallbackMessage: 'Failed to archive question items',
+    });
+  }
+
+  return Number(res.data?.archived_count ?? 0);
 }
 
 /**
@@ -275,17 +354,29 @@ export async function archiveQuestionBankItems(questionIds: string[]): Promise<n
  */
 export async function restoreQuestionBankItems(questionIds: string[]): Promise<number> {
   if (questionIds.length === 0) return 0;
-  const client = ensureClient();
-
-  const { data, error } = await client.rpc('restore_question_bank_items', {
-    p_question_ids: questionIds,
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'restoreQuestionBankItems',
   });
 
-  if (error) {
-    throw new Error(error.message);
+  let res;
+  try {
+    res = await client.rpc('restore_question_bank_items', {
+      p_question_ids: questionIds,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'restoreQuestionBankItems' });
   }
 
-  return Number(data?.restored_count ?? 0);
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'restoreQuestionBankItems',
+      fallbackMessage: 'Failed to restore question items',
+    });
+  }
+
+  return Number(res.data?.restored_count ?? 0);
 }
 
 /**
@@ -299,7 +390,10 @@ export async function importQuestions(
     return { successCount: 0, errors: [] };
   }
 
-  const client = ensureClient();
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'importQuestions',
+  });
 
   const itemsPayload = parsedRows.map((row) => ({
     question: {
@@ -326,19 +420,25 @@ export async function importQuestions(
     })),
   }));
 
-  const { data, error } = await client.rpc('import_question_bank_items', {
-    p_items: itemsPayload,
-  });
+  let res;
+  try {
+    res = await client.rpc('import_question_bank_items', {
+      p_items: itemsPayload,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'importQuestions' });
+  }
 
-  if (error) {
-    return {
-      successCount: 0,
-      errors: [error.message],
-    };
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'importQuestions',
+      fallbackMessage: 'Failed to import questions',
+    });
   }
 
   return {
-    successCount: Number(data?.imported_count ?? itemsPayload.length),
+    successCount: Number(res.data?.imported_count ?? itemsPayload.length),
     errors: [],
   };
 }
@@ -352,17 +452,29 @@ export async function addBankQuestionsToQuiz(
   defaultPoints = 5
 ): Promise<number> {
   if (questionIds.length === 0) return 0;
-  const client = ensureClient();
-
-  const { data, error } = await client.rpc('add_bank_questions_to_quiz', {
-    p_quiz_id: quizId,
-    p_question_ids: questionIds,
-    p_default_points: defaultPoints,
+  const client = requireSupabaseClient({
+    service: SERVICE,
+    operation: 'addBankQuestionsToQuiz',
   });
 
-  if (error) {
-    throw new Error(error.message);
+  let res;
+  try {
+    res = await client.rpc('add_bank_questions_to_quiz', {
+      p_quiz_id: quizId,
+      p_question_ids: questionIds,
+      p_default_points: defaultPoints,
+    });
+  } catch (err) {
+    throwServiceError(err, { service: SERVICE, operation: 'addBankQuestionsToQuiz' });
   }
 
-  return Number(data?.added_count ?? 0);
+  if (res.error) {
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'addBankQuestionsToQuiz',
+      fallbackMessage: 'Failed to add bank questions to quiz',
+    });
+  }
+
+  return Number(res.data?.added_count ?? 0);
 }

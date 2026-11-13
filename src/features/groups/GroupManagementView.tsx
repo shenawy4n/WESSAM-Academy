@@ -27,6 +27,7 @@ import { Button } from '../../components/ui/Button';
 import { StatusIndicator } from '../../components/ui/StatusIndicator';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   FolderGit2,
   Plus,
@@ -58,6 +59,7 @@ export const GroupManagementView: React.FC = () => {
   const [groups, setGroups] = useState<GroupRecord[]>([]);
   const [allStudents, setAllStudents] = useState<StudentRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -125,6 +127,7 @@ export const GroupManagementView: React.FC = () => {
   const loadInitialData = async (filter: GroupStatusFilter = statusFilter as GroupStatusFilter) => {
     try {
       setLoading(true);
+      setLoadError(null);
       setError(null);
       const [groupsData, studentsData] = await Promise.all([
         fetchGroups(filter),
@@ -132,9 +135,8 @@ export const GroupManagementView: React.FC = () => {
       ]);
       setGroups(groupsData);
       setAllStudents(studentsData);
-    } catch (err: any) {
-      console.error('Failed to load groups:', err);
-      setError(err?.message || 'Failed to load academic groups.');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -158,7 +160,7 @@ export const GroupManagementView: React.FC = () => {
       const details = await fetchGroupDetails(groupId);
       setGroupDetails(details);
     } catch (err: any) {
-      console.error('Failed to fetch group details:', err);
+      setIsDetailOpen(false);
       setError(err?.message || 'Failed to load group details.');
     } finally {
       setDetailsLoading(false);
@@ -172,8 +174,8 @@ export const GroupManagementView: React.FC = () => {
       setGroupDetails(details);
       const updatedGroups = await fetchGroups(statusFilter as GroupStatusFilter);
       setGroups(updatedGroups);
-    } catch (err) {
-      console.error('Error refreshing details:', err);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to refresh group details.');
     }
   };
 
@@ -554,6 +556,12 @@ export const GroupManagementView: React.FC = () => {
         <div className="p-12 flex justify-center items-center bg-white rounded-xl border border-slate-200">
           <LoadingSpinner size="lg" label={t.common.loading} />
         </div>
+      ) : loadError ? (
+        <ErrorState
+          error={loadError}
+          isRtl={isRtl}
+          onRetry={() => loadInitialData(statusFilter as GroupStatusFilter)}
+        />
       ) : filteredGroups.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-8">
           <EmptyState

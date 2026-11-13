@@ -16,6 +16,8 @@ import {
 import { CourseModal } from './CourseModal';
 import { CourseWorkspaceView } from './CourseWorkspaceView';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { getErrorMessage } from '../../lib/errors/serviceError';
 import {
   BookOpen,
   Plus,
@@ -48,20 +50,23 @@ export const CoursesManagementView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [courseToEdit, setCourseToEdit] = useState<CourseRecord | null>(null);
 
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const loadCourses = async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
+      setErrorMessage(null);
       const data = await fetchTeacherCourses({
         status: statusFilter,
         level: levelFilter,
         search: searchQuery,
       });
       setCourses(data);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to load courses');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setIsLoading(false);
     }
@@ -123,8 +128,8 @@ export const CoursesManagementView: React.FC = () => {
         isRtl ? 'تم حذف المقرر الدراسي بنجاح' : 'Course deleted successfully'
       );
       await loadCourses();
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to delete course');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, isRtl));
     }
   };
 
@@ -139,8 +144,8 @@ export const CoursesManagementView: React.FC = () => {
           : (isRtl ? 'تم تحويل المقرر إلى مسودة' : 'Course reverted to draft')
       );
       await loadCourses();
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to toggle course publish status');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, isRtl));
     }
   };
 
@@ -254,6 +259,8 @@ export const CoursesManagementView: React.FC = () => {
         <div className="p-12 text-center">
           <LoadingSpinner size="lg" label={t.common.loading} />
         </div>
+      ) : loadError ? (
+        <ErrorState error={loadError} isRtl={isRtl} onRetry={loadCourses} />
       ) : courses.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
           <BookOpen className="w-12 h-12 text-slate-400 mx-auto mb-3" />

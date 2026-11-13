@@ -21,6 +21,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { useLocale } from '../../hooks/useLocale';
 import { QuizRecord, QuestionItem } from './types';
 import { fetchStudentAssessments, startQuizAttempt } from './quizService';
@@ -32,7 +33,8 @@ export const StudentAssessmentsView: React.FC = () => {
 
   const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'available' | 'in_progress' | 'upcoming' | 'completed'>('all');
 
   // Runner state
@@ -50,12 +52,11 @@ export const StudentAssessmentsView: React.FC = () => {
   const loadAssessments = async () => {
     try {
       setLoading(true);
-      setError(null);
+      setLoadError(null);
       const data = await fetchStudentAssessments();
       setQuizzes(data);
-    } catch (err: any) {
-      console.error('Failed to load student assessments:', err);
-      setError(err.message || 'Error loading assessments');
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,7 @@ export const StudentAssessmentsView: React.FC = () => {
   const handleStartOrResume = async (quiz: QuizRecord) => {
     try {
       setStartingQuizId(quiz.id);
-      setError(null);
+      setActionError(null);
       const res = await startQuizAttempt(quiz.id);
 
       setActiveAttemptId(res.attemptId);
@@ -76,9 +77,8 @@ export const StudentAssessmentsView: React.FC = () => {
       setRunnerExpiresAt(res.expiresAt);
       setRunnerQuestions(res.questionSnapshot);
       setRunnerOpen(true);
-    } catch (err: any) {
-      console.error('Failed to launch assessment:', err);
-      setError(err.message || 'Could not start assessment');
+    } catch (err: unknown) {
+      setActionError(err);
     } finally {
       setStartingQuizId(null);
     }
@@ -117,11 +117,13 @@ export const StudentAssessmentsView: React.FC = () => {
         </p>
       </div>
 
-      {error && (
-        <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
-          <span>{error}</span>
-        </div>
+      {Boolean(actionError) && (
+        <ErrorState
+          variant="banner"
+          error={actionError}
+          isRtl={isRtl}
+          onDismiss={() => setActionError(null)}
+        />
       )}
 
       {/* Tabs */}
@@ -192,6 +194,8 @@ export const StudentAssessmentsView: React.FC = () => {
         <div className="py-16 flex justify-center">
           <LoadingSpinner size="lg" />
         </div>
+      ) : loadError ? (
+        <ErrorState error={loadError} isRtl={isRtl} onRetry={loadAssessments} />
       ) : filteredQuizzes.length === 0 ? (
         <EmptyState
           icon={<FileQuestion className="w-6 h-6 text-[#356AE6]" />}
@@ -324,12 +328,17 @@ export const StudentAssessmentsView: React.FC = () => {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => {
+                      onClick={async () => {
                         if (quiz.activeAttemptId) {
                           handleOpenReview(quiz.activeAttemptId);
-                        } else {
-                          // Fetch latest attempt review
-                          startQuizAttempt(quiz.id).then((res) => handleOpenReview(res.attemptId)).catch(() => {});
+                          return;
+                        }
+                        try {
+                          setActionError(null);
+                          const res = await startQuizAttempt(quiz.id);
+                          handleOpenReview(res.attemptId);
+                        } catch (err: unknown) {
+                          setActionError(err);
                         }
                       }}
                       className="w-full text-xs font-semibold text-slate-700 hover:bg-slate-100"

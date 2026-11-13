@@ -37,6 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
     if (!supabase) return;
     try {
+      setError(null);
       const { data, error: profileErr } = await supabase
         .from('profiles')
         .select('*')
@@ -45,6 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (profileErr) {
         console.error('Error fetching profile:', profileErr.message);
+        setError(profileErr.message || 'Failed to load user profile.');
         return;
       }
 
@@ -73,13 +75,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (data.role === 'student') {
-          const { data: studentData } = await supabase
+          const { data: studentData, error: studentErr } = await supabase
             .from('student_academic_profiles')
             .select('*, groups(name, name_arabic)')
             .eq('profile_id', userId)
             .maybeSingle();
 
-          if (studentData) {
+          if (studentErr) {
+            console.error('Error fetching student academic profile:', studentErr.message);
+            setError(studentErr.message || 'Failed to load student academic profile.');
+          } else if (studentData) {
             setStudentProfile({
               id: studentData.id,
               profileId: studentData.profile_id,
@@ -91,11 +96,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               status: studentData.status,
               notes: studentData.notes,
             });
+          } else {
+            setStudentProfile(null);
           }
+        } else {
+          setStudentProfile(null);
         }
       }
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load profile.';
       console.error('Failed to load profile:', err);
+      setError(msg);
     }
   }, []);
 

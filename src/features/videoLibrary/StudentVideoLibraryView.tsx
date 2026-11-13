@@ -10,6 +10,7 @@ import { fetchStudentVideos } from './videoLibraryService';
 import { formatDuration, calculateProgressPercentage } from './videoLibraryUtils';
 import { VideoPlayerModal } from './VideoPlayerModal';
 import { fetchStudentCourses } from '../courses/coursesService';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   Video,
   Play,
@@ -37,6 +38,7 @@ export const StudentVideoLibraryView: React.FC<StudentVideoLibraryViewProps> = (
   const [videos, setVideos] = useState<VideoAssetRecord[]>([]);
   const [courses, setCourses] = useState<{ id: string; title: string; titleArabic: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [courseFilter, setCourseFilter] = useState<string>('');
   const [progressTab, setProgressTab] = useState<'all' | 'in_progress' | 'completed' | 'unwatched'>('all');
@@ -45,6 +47,7 @@ export const StudentVideoLibraryView: React.FC<StudentVideoLibraryViewProps> = (
   const loadData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const [vids, crs] = await Promise.all([
         fetchStudentVideos({
           searchQuery,
@@ -61,8 +64,8 @@ export const StudentVideoLibraryView: React.FC<StudentVideoLibraryViewProps> = (
           titleArabic: c.titleArabic,
         }))
       );
-    } catch (err: any) {
-      console.error('Failed to load student video library:', err);
+    } catch (err: unknown) {
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -194,6 +197,8 @@ export const StudentVideoLibraryView: React.FC<StudentVideoLibraryViewProps> = (
         <div className="p-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
           {isRtl ? 'جاري تحميل مكتبة الفيديوهات...' : 'Loading video library...'}
         </div>
+      ) : loadError ? (
+        <ErrorState error={loadError} isRtl={isRtl} onRetry={loadData} />
       ) : videos.length === 0 ? (
         <div className="p-12 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 space-y-3">
           <Video className="w-12 h-12 text-slate-300 mx-auto" />

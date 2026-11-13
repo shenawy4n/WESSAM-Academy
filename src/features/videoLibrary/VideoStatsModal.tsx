@@ -8,6 +8,7 @@ import { useLocale } from '../../hooks/useLocale';
 import { VideoAssetRecord, VideoStatsRecord } from './types';
 import { getVideoStats } from './videoLibraryService';
 import { formatDuration } from './videoLibraryUtils';
+import { ErrorState } from '../../components/ui/ErrorState';
 import {
   X,
   BarChart3,
@@ -32,16 +33,20 @@ export const VideoStatsModal: React.FC<VideoStatsModalProps> = ({
   const { t, isRtl } = useLocale();
   const [stats, setStats] = useState<VideoStatsRecord | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  const loadStats = () => {
+    setLoading(true);
+    setError(null);
+    getVideoStats(video.id)
+      .then((s) => setStats(s))
+      .catch((err: unknown) => setError(err))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     if (isOpen) {
-      setLoading(true);
-      setError(null);
-      getVideoStats(video.id)
-        .then((s) => setStats(s))
-        .catch((err) => setError(err.message || 'Failed to load video statistics'))
-        .finally(() => setLoading(false));
+      loadStats();
     }
   }, [isOpen, video]);
 
@@ -81,9 +86,7 @@ export const VideoStatsModal: React.FC<VideoStatsModalProps> = ({
               <span className="text-xs">{isRtl ? 'جاري تحليل بيانات المشاهدة...' : 'Analyzing viewer statistics...'}</span>
             </div>
           ) : error ? (
-            <div className="p-4 bg-rose-50 text-rose-700 rounded-xl text-xs">
-              {error}
-            </div>
+            <ErrorState error={error} isRtl={isRtl} onRetry={loadStats} />
           ) : stats ? (
             <>
               {/* Metrics Grid */}

@@ -16,6 +16,7 @@ import {
   generateQuestionBankJsonTemplate,
 } from './questionBankUtils';
 import { ImportValidationSummary, QuestionBankItem, QuestionOptionItem } from './types';
+import { getErrorMessage } from '../../lib/errors/serviceError';
 
 interface QuestionImportModalProps {
   isOpen: boolean;
@@ -112,8 +113,8 @@ export const QuestionImportModal: React.FC<QuestionImportModalProps> = ({
     try {
       await onCommitImport(validItems);
       onClose();
-    } catch (err: any) {
-      setCommitError(err.message || 'فشل في استيراد الأسئلة');
+    } catch (err: unknown) {
+      setCommitError(getErrorMessage(err, true));
     } finally {
       setCommitting(false);
     }

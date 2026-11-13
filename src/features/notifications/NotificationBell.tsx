@@ -10,6 +10,7 @@ import { useAuth } from '../auth/AuthContext';
 import { notificationService } from './notificationService';
 import { AppNotification } from './types';
 import { resolveCategoryBadge, resolveCategoryLabel, formatNotificationTime } from './notificationUtils';
+import { ErrorState } from '../../components/ui/ErrorState';
 
 interface NotificationBellProps {
   onOpenCenter: () => void;
@@ -26,9 +27,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
   const [recentNotifications, setRecentNotifications] = useState<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const loadData = async () => {
+    setLoadError(null);
     try {
       const [count, listRes] = await Promise.all([
         notificationService.getUnreadCount(),
@@ -36,8 +40,8 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
       ]);
       setUnreadCount(count);
       setRecentNotifications(listRes.notifications);
-    } catch {
-      // ignore
+    } catch (err) {
+      setLoadError(err);
     }
   };
 
@@ -46,9 +50,15 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
 
     // Subscribe to realtime changes if user exists
     if (user?.id) {
-      const unsubscribe = notificationService.subscribeToNotifications(user.id, () => {
-        loadData();
-      });
+      const unsubscribe = notificationService.subscribeToNotifications(
+        user.id,
+        () => {
+          loadData();
+        },
+        (err) => {
+          setLoadError(err);
+        }
+      );
       return () => unsubscribe();
     }
   }, [user?.id]);
@@ -71,18 +81,30 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
   const handleMarkAllRead = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsLoading(true);
-    await notificationService.markAllAsRead();
-    await loadData();
-    setIsLoading(false);
+    setActionError(null);
+    try {
+      await notificationService.markAllAsRead();
+      await loadData();
+    } catch (err) {
+      setActionError(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleItemClick = async (notif: AppNotification) => {
+    setActionError(null);
     if (!notif.isRead) {
-      await notificationService.markAsRead(notif.id);
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-      setRecentNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
-      );
+      try {
+        await notificationService.markAsRead(notif.id);
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+        setRecentNotifications((prev) =>
+          prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
+        );
+      } catch (err) {
+        setActionError(err);
+        return;
+      }
     }
     setIsOpen(false);
 
@@ -142,9 +164,20 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
             )}
           </div>
 
+          {/* Action Error Banner */}
+          {Boolean(actionError) && (
+            <div className="p-2.5 border-b border-slate-100">
+              <ErrorState variant="banner" error={actionError} isRtl={isRtl} onDismiss={() => setActionError(null)} />
+            </div>
+          )}
+
           {/* List */}
           <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
-            {recentNotifications.length === 0 ? (
+            {loadError ? (
+              <div className="p-3">
+                <ErrorState variant="banner" error={loadError} isRtl={isRtl} onRetry={loadData} />
+              </div>
+            ) : recentNotifications.length === 0 ? (
               <div className="py-8 text-center text-slate-400 text-xs">
                 {isRtl ? 'لا توجد إشعارات حالياً' : 'No notifications right now'}
               </div>
