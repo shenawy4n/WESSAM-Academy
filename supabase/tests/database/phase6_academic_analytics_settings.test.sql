@@ -58,8 +58,12 @@ BEGIN
     INSERT INTO public.group_courses (group_id, course_id) VALUES (v_group_a, v_course_a)
     ON CONFLICT DO NOTHING;
 
-    INSERT INTO public.group_students (group_id, student_id, is_primary) VALUES (v_group_a, v_student_a, true)
+    INSERT INTO public.group_students (group_id, student_id) VALUES (v_group_a, v_student_a)
     ON CONFLICT DO NOTHING;
+
+    INSERT INTO public.student_academic_profiles (profile_id, student_number, username, group_id, status)
+    VALUES (v_student_a, 'WES-P6-001', 'studenta_p6', v_group_a, 'active')
+    ON CONFLICT (profile_id) DO UPDATE SET group_id = EXCLUDED.group_id;
 
     -- Assignment with UNRELEASED grade for Student A
     INSERT INTO public.assignments (id, teacher_id, course_id, title, title_arabic, instructions, due_date, max_score, target_group_id, is_published, status)
