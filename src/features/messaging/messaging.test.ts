@@ -422,4 +422,192 @@ describe('messagingService - Truthful Errors, Storage Rollback & Realtime', () =
     unsub();
     assert.equal(mock.channels.length, 0);
   });
+
+  it('10. Student loads empty conversation list and empty authorized teachers without throwing schema or database errors', async () => {
+    const mock = createMessagingMockClient({
+      user: { id: userId },
+      rpcHandler: () => ({ data: [], error: null }),
+    });
+    setSupabaseClientForTesting(mock.client);
+
+    const [convs, teachers] = await Promise.all([
+      messagingService.fetchConversations(),
+      messagingService.fetchAuthorizedTeachers(),
+    ]);
+
+    assert.deepEqual(convs, []);
+    assert.deepEqual(teachers, []);
+    assert.deepEqual(
+      mock.rpcCalls.map((c) => c.fnName),
+      ['get_my_message_conversations', 'get_authorized_messaging_teachers']
+    );
+  });
+
+  it('11. Student sends text-only message and teacher receives, marks read, and replies cleanly', async () => {
+    const teacherId = '22222222-2222-4222-8222-222222222222';
+    let activeUserId = userId;
+    const mock = createMessagingMockClient({
+      rpcHandler: (fnName, params) => {
+        if (fnName === 'send_direct_message') {
+          return {
+            data: {
+              id: activeUserId === userId ? 'msg-student-1' : 'msg-teacher-1',
+              conversation_id: params.p_conversation_id,
+              sender_id: activeUserId,
+              recipient_id: activeUserId === userId ? teacherId : userId,
+              body: params.p_body,
+              has_attachments: false,
+              client_message_id: params.p_client_message_id,
+              is_read: false,
+              read_at: null,
+              created_at: '2026-11-14T10:00:00Z',
+              sender_name: activeUserId === userId ? 'Student One' : 'Teacher One',
+              sender_name_arabic: activeUserId === userId ? 'طالب ١' : 'معلم ١',
+              attachments: [],
+            },
+            error: null,
+          };
+        }
+        if (fnName === 'get_conversation_messages') {
+          return {
+            data: [
+              {
+                id: 'msg-student-1',
+                conversation_id: convId,
+                sender_id: userId,
+                recipient_id: teacherId,
+                body: 'Assalamu Alaikum teacher',
+                has_attachments: false,
+                client_message_id: 'cid-1',
+                is_read: false,
+                read_at: null,
+                created_at: '2026-11-14T10:00:00Z',
+                sender_name: 'Student One',
+                sender_name_arabic: 'طالب ١',
+                attachments: [],
+              },
+            ],
+            error: null,
+          };
+        }
+        if (fnName === 'mark_conversation_messages_read') {
+          return { data: 1, error: null };
+        }
+        return { data: [], error: null };
+      },
+    });
+    mock.client.auth.getUser = async () => ({
+      data: { user: { id: activeUserId } },
+      error: null,
+    });
+    setSupabaseClientForTesting(mock.client);
+
+    // Student sends text message
+    const studentMsg = await messagingService.sendMessage({
+      conversationId: convId,
+      body: 'Assalamu Alaikum teacher',
+    });
+    assert.equal(studentMsg.id, 'msg-student-1');
+    assert.equal(studentMsg.senderId, userId);
+    assert.equal(studentMsg.hasAttachments, false);
+
+    // Teacher receives, marks read, and replies
+    activeUserId = teacherId;
+    const inboxMsgs = await messagingService.fetchMessages(convId);
+    assert.equal(inboxMsgs.length, 1);
+    assert.equal(inboxMsgs[0].body, 'Assalamu Alaikum teacher');
+
+    const marked = await messagingService.markConversationRead(convId);
+    assert.equal(marked, 1);
+
+    const teacherReply = await messagingService.sendMessage({
+      conversationId: convId,
+      body: 'Wa Alaikum Assalam, welcome!',
+    });
+    assert.equal(teacherReply.id, 'msg-teacher-1');
+    assert.equal(teacherReply.senderId, teacherId);
+    assert.equal(teacherReply.recipientId, userId);
+  });
+
+  it('12. Preserves exact SCHEMA_ERROR classification for PGRST202 missing RPC, 42703 missing column, and 42P01 missing relation', async () => {
+    const schemaCases = [
+      {
+        code: 'PGRST202',
+        status: 404,
+        message: 'Could not find the function public.get_my_message_conversations in the schema cache',
+      },
+      {
+        code: '42703',
+        status: 400,
+        message: 'column a.teacher_id does not exist',
+      },
+      {
+        code: '42P01',
+        status: 400,
+        message: 'relation "public.assignment_targets" does not exist',
+      },
+    ];
+
+    for (const pgError of schemaCases) {
+      const mock = createMessagingMockClient({
+        rpcHandler: () => ({ data: null, error: pgError }),
+      });
+      setSupabaseClientForTesting(mock.client);
+
+      await assert.rejects(
+        () => messagingService.fetchConversations(),
+        (err: unknown) =>
+          err instanceof ServiceError &&
+          err.category === 'SCHEMA_ERROR' &&
+          err.code === pgError.code
+      );
+    }
+  });
+
+  it('13. Distinguishes missing Storage bucket (SCHEMA_ERROR) from Storage RLS denial (AUTHORIZATION_ERROR)', async () => {
+    const missingBucketMock = createMessagingMockClient({
+      user: { id: userId },
+      uploadError: { name: 'StorageApiError', status: 404, message: 'Bucket not found' },
+    });
+    setSupabaseClientForTesting(missingBucketMock.client);
+
+    const pdf = createMockFile('hw.pdf', new TextEncoder().encode('%PDF-1.7\nok'), 'application/pdf');
+    await assert.rejects(
+      () => messagingService.sendMessage({ conversationId: convId, body: 'file', files: [pdf] }),
+      (err: unknown) => err instanceof ServiceError && err.category === 'SCHEMA_ERROR'
+    );
+
+    const rlsDeniedMock = createMessagingMockClient({
+      user: { id: userId },
+      uploadError: {
+        name: 'StorageApiError',
+        status: 403,
+        message: 'new row violates row-level security policy',
+      },
+    });
+    setSupabaseClientForTesting(rlsDeniedMock.client);
+
+    await assert.rejects(
+      () => messagingService.sendMessage({ conversationId: convId, body: 'file', files: [pdf] }),
+      (err: unknown) => err instanceof ServiceError && err.category === 'AUTHORIZATION_ERROR'
+    );
+  });
+
+  it('14. Throws DATABASE_ERROR when getOrCreateConversation or send_direct_message unexpectedly returns null data', async () => {
+    const mock = createMessagingMockClient({
+      user: { id: userId },
+      rpcHandler: () => ({ data: null, error: null }),
+    });
+    setSupabaseClientForTesting(mock.client);
+
+    await assert.rejects(
+      () => messagingService.getOrCreateConversation({ teacherId: '22222222-2222-4222-8222-222222222222' }),
+      (err: unknown) => err instanceof ServiceError && err.category === 'DATABASE_ERROR'
+    );
+
+    await assert.rejects(
+      () => messagingService.sendMessage({ conversationId: convId, body: 'Hello' }),
+      (err: unknown) => err instanceof ServiceError && err.category === 'DATABASE_ERROR'
+    );
+  });
 });

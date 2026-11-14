@@ -139,6 +139,8 @@ const SCHEMA_MESSAGE_PATTERNS: RegExp[] = [
   /relation ["']?[\w.]+["']? does not exist/i,
   /function [\w.]+(?:\([^)]*\))? does not exist/i,
   /in the schema cache/i,
+  /\bbucket not found\b/i,
+  /storage bucket .*not found/i,
 ];
 
 const NETWORK_MESSAGE_PATTERNS: RegExp[] = [
@@ -296,6 +298,31 @@ export function classifyErrorCategory(err: unknown): ServiceErrorCategory {
   return 'UNKNOWN_ERROR';
 }
 
+export function logServiceError(serviceErr: ServiceError): void {
+  if (typeof console === 'undefined' || typeof console.error !== 'function') {
+    return;
+  }
+  console.error('[ServiceError]', {
+    service: serviceErr.service,
+    operation: serviceErr.operation,
+    category: serviceErr.category,
+    code: serviceErr.code,
+    status: serviceErr.status,
+    message: sanitizeUiDetail(serviceErr.message),
+    details: serviceErr.details ? sanitizeUiDetail(serviceErr.details) : undefined,
+    hint: serviceErr.hint ? sanitizeUiDetail(serviceErr.hint) : undefined,
+  });
+}
+
+function isAutomatedTestRuntime(): boolean {
+  if (typeof process === 'undefined') return false;
+  return (
+    process.env?.NODE_ENV === 'test' ||
+    Boolean(process.env?.NODE_TEST_CONTEXT) ||
+    Boolean(process.execArgv?.some((arg) => arg.includes('test')))
+  );
+}
+
 export function toServiceError(err: unknown, context: ServiceErrorContext): ServiceError {
   if (err instanceof ServiceError) {
     return err;
@@ -308,7 +335,7 @@ export function toServiceError(err: unknown, context: ServiceErrorContext): Serv
     context.fallbackMessage ||
     `Operation ${context.service}.${context.operation} failed`;
 
-  return new ServiceError({
+  const serviceErr = new ServiceError({
     category,
     message,
     service: context.service,
@@ -320,6 +347,12 @@ export function toServiceError(err: unknown, context: ServiceErrorContext): Serv
     isRetryable: category === 'NETWORK_ERROR',
     originalError: err,
   });
+
+  if (category !== 'VALIDATION_ERROR' && !isAutomatedTestRuntime()) {
+    logServiceError(serviceErr);
+  }
+
+  return serviceErr;
 }
 
 export function throwServiceError(err: unknown, context: ServiceErrorContext): never {

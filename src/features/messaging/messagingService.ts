@@ -178,6 +178,15 @@ export const messagingService = {
       });
     }
 
+    if (!res.data || typeof res.data !== 'object') {
+      throw new ServiceError({
+        category: 'DATABASE_ERROR',
+        message: 'Failed to initialize conversation: server returned an empty record.',
+        service: SERVICE,
+        operation: 'getOrCreateConversation',
+      });
+    }
+
     return mapConversation(res.data);
   },
 
@@ -388,6 +397,15 @@ export const messagingService = {
           service: SERVICE,
           operation: 'sendMessage.persist',
           fallbackMessage: 'Failed to send message',
+        });
+      }
+
+      if (!rpcRes.data || typeof rpcRes.data !== 'object') {
+        throw new ServiceError({
+          category: 'DATABASE_ERROR',
+          message: 'Message persistence returned an empty server response.',
+          service: SERVICE,
+          operation: 'sendMessage.persist',
         });
       }
 

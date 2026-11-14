@@ -14,6 +14,7 @@ import {
   requireAuthenticatedUser,
   formatServiceErrorForUi,
   getErrorMessage,
+  logServiceError,
 } from './serviceError';
 import { setSupabaseClientForTesting } from '../supabase/client';
 
@@ -59,7 +60,7 @@ describe('serviceError', () => {
       );
     });
 
-    it('classifies verified schema errors cleanly', () => {
+    it('classifies verified schema errors cleanly including missing RPCs and Storage buckets', () => {
       assert.equal(
         classifyErrorCategory({
           code: 'PGRST200',
@@ -68,7 +69,18 @@ describe('serviceError', () => {
         'SCHEMA_ERROR'
       );
       assert.equal(
+        classifyErrorCategory({
+          code: 'PGRST202',
+          message: 'Could not find the function public.get_my_message_conversations in the schema cache',
+        }),
+        'SCHEMA_ERROR'
+      );
+      assert.equal(
         classifyErrorCategory({ code: 'PGRST204', message: "Could not find the 'status' column of 'assignments'" }),
+        'SCHEMA_ERROR'
+      );
+      assert.equal(
+        classifyErrorCategory({ code: '42703', message: 'column a.teacher_id does not exist' }),
         'SCHEMA_ERROR'
       );
       assert.equal(
@@ -76,14 +88,18 @@ describe('serviceError', () => {
         'SCHEMA_ERROR'
       );
       assert.equal(
-        classifyErrorCategory({ code: '42P01', message: 'relation "public.missing_table" does not exist' }),
+        classifyErrorCategory({ code: '42P01', message: 'relation "public.assignment_targets" does not exist' }),
+        'SCHEMA_ERROR'
+      );
+      assert.equal(
+        classifyErrorCategory({ status: 404, name: 'StorageApiError', message: 'Bucket not found' }),
         'SCHEMA_ERROR'
       );
     });
 
     it('classifies not found, validation, and database errors cleanly', () => {
       assert.equal(classifyErrorCategory({ code: 'PGRST116', message: '0 rows' }), 'NOT_FOUND');
-      assert.equal(classifyErrorCategory({ status: 404, message: 'Not found' }), 'NOT_FOUND');
+      assert.equal(classifyErrorCategory({ status: 404, message: 'Object not found' }), 'NOT_FOUND');
       assert.equal(classifyErrorCategory({ status: 422, message: 'Unprocessable' }), 'VALIDATION_ERROR');
       assert.equal(
         classifyErrorCategory({ code: '23505', message: 'duplicate key value violates unique constraint' }),
@@ -93,7 +109,7 @@ describe('serviceError', () => {
   });
 
   describe('isMissingSchemaFeatureError', () => {
-    it('returns true only for verified schema/relationship/RPC missing errors', () => {
+    it('returns true only for verified schema/relationship/RPC/bucket missing errors', () => {
       assert.equal(isMissingSchemaFeatureError({ code: 'PGRST200', message: 'Missing relationship' }), true);
       assert.equal(isMissingSchemaFeatureError({ code: 'PGRST202', message: 'Missing RPC' }), true);
       assert.equal(isMissingSchemaFeatureError({ code: 'PGRST204', message: 'Missing column' }), true);
@@ -101,6 +117,7 @@ describe('serviceError', () => {
       assert.equal(isMissingSchemaFeatureError({ code: '42703', message: 'column does not exist' }), true);
       assert.equal(isMissingSchemaFeatureError({ code: '42P01', message: 'relation does not exist' }), true);
       assert.equal(isMissingSchemaFeatureError({ code: '42883', message: 'function does not exist' }), true);
+      assert.equal(isMissingSchemaFeatureError({ status: 404, message: 'Bucket not found' }), true);
     });
 
     it('strictly rejects RLS (42501), auth (401), forbidden (403), network, and timeout errors', () => {
@@ -163,13 +180,14 @@ describe('serviceError', () => {
       assert.ok(authzUi.title.includes('غير مصرح'));
     });
 
-    it('redacts Bearer tokens, JWTs, API keys, and passwords from UI messages', () => {
+    it('redacts Bearer tokens, JWTs, API keys, and passwords from UI messages and diagnostic logs', () => {
       const sensitiveErr = new ServiceError({
         category: 'DATABASE_ERROR',
         message:
           'Request failed with Bearer super_secret_token_123 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U apikey=sb_secret_xyz password=hunter2',
         service: 'test',
         operation: 'op',
+        code: 'PGRST202',
       });
 
       const msgAr = getErrorMessage(sensitiveErr, true);
@@ -182,6 +200,23 @@ describe('serviceError', () => {
         assert.equal(rendered.includes('hunter2'), false);
         assert.ok(rendered.includes('[REDACTED]'));
       }
+
+      const logged: unknown[] = [];
+      const originalError = console.error;
+      console.error = (...args: unknown[]) => {
+        logged.push(args);
+      };
+      try {
+        logServiceError(sensitiveErr);
+      } finally {
+        console.error = originalError;
+      }
+      assert.equal(logged.length, 1);
+      const payload = JSON.stringify(logged[0]);
+      assert.equal(payload.includes('super_secret_token_123'), false);
+      assert.equal(payload.includes('sb_secret_xyz'), false);
+      assert.equal(payload.includes('hunter2'), false);
+      assert.ok(payload.includes('PGRST202'));
     });
   });
 });
