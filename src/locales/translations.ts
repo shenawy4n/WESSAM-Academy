@@ -186,6 +186,44 @@ export interface Translations {
     noGroupsAssigned: string;
     activityEmptyTitle: string;
     activityEmptyDesc: string;
+    activityLastLearning: string;
+    activityNoLearningYet: string;
+    activityTimezoneNote: string;
+    activityEnrolledCourses: string;
+    activityOverallProgress: string;
+    activityCompletedLessons: string;
+    activityPendingLessons: string;
+    activityAttendanceRate: string;
+    activityQuizAttempts: string;
+    activityAssignmentsSubmitted: string;
+    activitySectionAll: string;
+    activitySectionCourses: string;
+    activitySectionAttendance: string;
+    activitySectionQuizzes: string;
+    activitySectionAssignments: string;
+    activityNoCourses: string;
+    activityNoPublishedLessons: string;
+    activityViewLessons: string;
+    activityHideLessons: string;
+    activityNoAttendance: string;
+    activityNoQuizzes: string;
+    activityNoAssignments: string;
+    activityTeacherFeedback: string;
+    activityAttemptLabel: string;
+    activityLateBadge: string;
+    activityPassed: string;
+    activityFailed: string;
+    activityPendingGrading: string;
+    activityInProgress: string;
+    activityGraded: string;
+    activitySubmitted: string;
+    activityRevisionRequested: string;
+    activityAttendancePresent: string;
+    activityAttendanceLate: string;
+    activityAttendanceExcused: string;
+    activityAttendanceAbsent: string;
+    activityLoadMore: string;
+    activityRefresh: string;
   };
   groups: {
     title: string;
@@ -512,8 +550,46 @@ export const translations: Record<Language, Translations> = {
       statusSuccess: 'تم تحديث حالة حساب الطالب بنجاح',
       enrollSuccess: 'تم تسجيل الطالب في المجموعة بنجاح',
       noGroupsAssigned: 'الطالب غير مسجل في أي مجموعة دراسية حالياً.',
-      activityEmptyTitle: 'السجل الأكاديمي قيد المزامنة',
-      activityEmptyDesc: 'ستظهر هنا الاختبارات المكتملة، التكاليف المصححة، وسجلات الحضور فور بدئها في المراحل القادمة.',
+      activityEmptyTitle: 'لا توجد أنشطة تعليمية مسجلة بعد',
+      activityEmptyDesc: 'لم يسجل لهذا الطالب حتى الآن تقدم في الدروس أو حضور في الجلسات المباشرة أو محاولات اختبارات أو تسليم واجبات ضمن المقررات المتاحة لك.',
+      activityLastLearning: 'آخر نشاط تعليمي',
+      activityNoLearningYet: 'لا يوجد نشاط تعليمي مسجل',
+      activityTimezoneNote: 'توقيت مكة المكرمة (Asia/Riyadh)',
+      activityEnrolledCourses: 'المقررات المسجلة',
+      activityOverallProgress: 'نسبة الإنجاز العام',
+      activityCompletedLessons: 'الدروس المكتملة',
+      activityPendingLessons: 'الدروس المتبقية',
+      activityAttendanceRate: 'نسبة الحضور',
+      activityQuizAttempts: 'الاختبارات المنجزة',
+      activityAssignmentsSubmitted: 'الواجبات المسلمة',
+      activitySectionAll: 'الكل',
+      activitySectionCourses: 'المقررات والدروس',
+      activitySectionAttendance: 'الحضور المباشر',
+      activitySectionQuizzes: 'الاختبارات',
+      activitySectionAssignments: 'الواجبات',
+      activityNoCourses: 'لا توجد مقررات دراسية مسندة لمجموعات هذا الطالب.',
+      activityNoPublishedLessons: 'لا توجد دروس منشورة في هذا المقرر حتى الآن.',
+      activityViewLessons: 'عرض الدروس المكتملة والمتبقية',
+      activityHideLessons: 'إخفاء تفاصيل الدروس',
+      activityNoAttendance: 'لا توجد سجلات حضور في الجلسات المباشرة.',
+      activityNoQuizzes: 'لا توجد محاولات اختبارات مسجلة لهذا الطالب.',
+      activityNoAssignments: 'لا توجد تسليمات واجبات مسجلة لهذا الطالب.',
+      activityTeacherFeedback: 'ملاحظات المعلم',
+      activityAttemptLabel: 'المحاولة',
+      activityLateBadge: 'متأخر',
+      activityPassed: 'ناجح',
+      activityFailed: 'لم يجتز',
+      activityPendingGrading: 'بانتظار التصحيح',
+      activityInProgress: 'قيد التنفيذ',
+      activityGraded: 'تم التصحيح',
+      activitySubmitted: 'تم التسليم',
+      activityRevisionRequested: 'مطلوب تعديل',
+      activityAttendancePresent: 'حاضر',
+      activityAttendanceLate: 'متأخر',
+      activityAttendanceExcused: 'بعذر',
+      activityAttendanceAbsent: 'غائب',
+      activityLoadMore: 'عرض المزيد',
+      activityRefresh: 'تحديث السجل',
     },
     groups: {
       title: 'إدارة المجموعات الدراسية',
@@ -838,8 +914,46 @@ export const translations: Record<Language, Translations> = {
       statusSuccess: 'Student account status successfully updated',
       enrollSuccess: 'Student successfully enrolled into group',
       noGroupsAssigned: 'Student is not currently enrolled in any academic groups.',
-      activityEmptyTitle: 'Academic Transcript Syncing',
-      activityEmptyDesc: 'Completed quizzes, evaluated submissions, and live attendance records will appear here as coursework begins.',
+      activityEmptyTitle: 'No Recorded Learning Activity Yet',
+      activityEmptyDesc: 'This student has no recorded lesson progress, live session attendance, quiz attempts, or assignment submissions within your authorized courses.',
+      activityLastLearning: 'Last Learning Activity',
+      activityNoLearningYet: 'No learning activity recorded',
+      activityTimezoneNote: 'Makkah Time (Asia/Riyadh)',
+      activityEnrolledCourses: 'Enrolled Courses',
+      activityOverallProgress: 'Overall Progress',
+      activityCompletedLessons: 'Completed Lessons',
+      activityPendingLessons: 'Pending Lessons',
+      activityAttendanceRate: 'Attendance Rate',
+      activityQuizAttempts: 'Quiz Attempts',
+      activityAssignmentsSubmitted: 'Assignments Submitted',
+      activitySectionAll: 'All',
+      activitySectionCourses: 'Courses & Lessons',
+      activitySectionAttendance: 'Attendance',
+      activitySectionQuizzes: 'Quizzes',
+      activitySectionAssignments: 'Assignments',
+      activityNoCourses: 'No courses are assigned to this student’s groups.',
+      activityNoPublishedLessons: 'No published lessons in this course yet.',
+      activityViewLessons: 'View completed & pending lessons',
+      activityHideLessons: 'Hide lesson breakdown',
+      activityNoAttendance: 'No live session attendance records found.',
+      activityNoQuizzes: 'No quiz attempts recorded for this student.',
+      activityNoAssignments: 'No assignment submissions recorded for this student.',
+      activityTeacherFeedback: 'Teacher Feedback',
+      activityAttemptLabel: 'Attempt',
+      activityLateBadge: 'Late',
+      activityPassed: 'Passed',
+      activityFailed: 'Not Passed',
+      activityPendingGrading: 'Pending Grading',
+      activityInProgress: 'In Progress',
+      activityGraded: 'Graded',
+      activitySubmitted: 'Submitted',
+      activityRevisionRequested: 'Revision Requested',
+      activityAttendancePresent: 'Present',
+      activityAttendanceLate: 'Late',
+      activityAttendanceExcused: 'Excused',
+      activityAttendanceAbsent: 'Absent',
+      activityLoadMore: 'Load More',
+      activityRefresh: 'Refresh Activity',
     },
     groups: {
       title: 'Academic Group Management',

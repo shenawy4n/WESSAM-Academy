@@ -34,6 +34,7 @@ import { SafeVideoPlayer } from './SafeVideoPlayer';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { getErrorMessage } from '../../lib/errors/serviceError';
+import { triggerSafeResourceDownload } from '../../lib/safeDownload';
 import {
   ArrowLeft,
   ArrowRight,
@@ -408,12 +409,16 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
     }
   };
 
-  const handleDownloadResource = async (resourceId: string) => {
+  const handleDownloadResource = async (
+    resourceId: string,
+    fileName?: string | null,
+    fileType?: string | null
+  ) => {
     try {
       setErrorMessage(null);
       setDownloadingResourceId(resourceId);
       const url = await getLessonResourceDownloadUrl(resourceId);
-      window.open(url, '_blank', 'noopener,noreferrer');
+      triggerSafeResourceDownload(url, { fileName, fileType });
     } catch (err: unknown) {
       setErrorMessage(getErrorMessage(err, isRtl));
     } finally {
@@ -857,9 +862,15 @@ export const CourseWorkspaceView: React.FC<CourseWorkspaceViewProps> = ({
                                           </span>
                                           <button
                                             type="button"
-                                            onClick={() => handleDownloadResource(res.id)}
+                                            onClick={() =>
+                                              handleDownloadResource(
+                                                res.id,
+                                                isRtl ? res.titleArabic || res.title : res.title,
+                                                res.fileType
+                                              )
+                                            }
                                             disabled={downloadingResourceId === res.id}
-                                            className="text-[#356AE6] hover:text-[#2855BE] cursor-pointer"
+                                            className="text-[#356AE6] hover:text-[#2855BE] cursor-pointer disabled:opacity-50"
                                             title={isRtl ? 'تحميل الرابط الآمن' : 'Download signed link'}
                                           >
                                             <Download className="w-3 h-3" />

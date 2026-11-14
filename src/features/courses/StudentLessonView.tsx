@@ -13,6 +13,7 @@ import {
 } from './coursesService';
 import { SafeVideoPlayer } from './SafeVideoPlayer';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { triggerSafeResourceDownload } from '../../lib/safeDownload';
 import {
   ArrowLeft,
   ArrowRight,
@@ -55,12 +56,16 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
   const [actionError, setActionError] = useState<unknown>(null);
   const [downloadingResourceId, setDownloadingResourceId] = useState<string | null>(null);
 
-  const handleDownloadResource = async (resourceId: string) => {
+  const handleDownloadResource = async (
+    resourceId: string,
+    fileName?: string | null,
+    fileType?: string | null
+  ) => {
     setActionError(null);
     try {
       setDownloadingResourceId(resourceId);
       const url = await getLessonResourceDownloadUrl(resourceId);
-      window.open(url, '_blank', 'noopener,noreferrer');
+      triggerSafeResourceDownload(url, { fileName, fileType });
     } catch (err) {
       setActionError(err);
     } finally {
@@ -196,7 +201,13 @@ export const StudentLessonView: React.FC<StudentLessonViewProps> = ({
                 <button
                   type="button"
                   key={res.id}
-                  onClick={() => handleDownloadResource(res.id)}
+                  onClick={() =>
+                    handleDownloadResource(
+                      res.id,
+                      isRtl ? res.titleArabic || res.title : res.title,
+                      res.fileType
+                    )
+                  }
                   disabled={downloadingResourceId === res.id}
                   className="p-3 rounded-xl border border-slate-200 bg-white hover:border-[#356AE6] hover:bg-blue-50/30 transition-all flex items-center justify-between gap-3 text-start cursor-pointer disabled:opacity-60"
                 >

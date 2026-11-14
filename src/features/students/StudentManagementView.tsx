@@ -22,6 +22,7 @@ import { StatusIndicator } from '../../components/ui/StatusIndicator';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { StudentActivityTab } from './StudentActivityTab';
 import {
   Users,
   UserPlus,
@@ -42,7 +43,6 @@ import {
   ChevronLeft,
   ChevronRight,
   BookOpen,
-  ClipboardList,
 } from 'lucide-react';
 
 export const StudentManagementView: React.FC = () => {
@@ -968,13 +968,12 @@ export const StudentManagementView: React.FC = () => {
               </div>
             )}
 
-            {/* Tab 4: Activity (Phase 3/4 integration notice) */}
+            {/* Tab 4: Academic Activity */}
             {detailTab === 'activity' && (
-              <div className="p-8 text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
-                <ClipboardList className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <h4 className="text-sm font-bold text-slate-700">{t.students.activityEmptyTitle}</h4>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">{t.students.activityEmptyDesc}</p>
-              </div>
+              <StudentActivityTab
+                student={selectedStudent}
+                isActive={isDetailOpen && detailTab === 'activity'}
+              />
             )}
 
             {/* Action Bar */}

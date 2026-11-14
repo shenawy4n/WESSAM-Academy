@@ -9,6 +9,7 @@ import {
   throwServiceError,
   ServiceError,
 } from '../../lib/errors/serviceError';
+import { validateDownloadUrl } from '../../lib/safeDownload';
 
 export type CourseLevel = 'beginner' | 'intermediate' | 'advanced';
 
@@ -1099,9 +1100,24 @@ export async function getLessonResourceDownloadUrl(resourceId: string): Promise<
     });
   }
 
-  const path = res.data.storage_path || res.data.file_url;
+  const path = (res.data.storage_path || res.data.file_url || '').trim();
+  if (!path) {
+    throw new ServiceError({
+      category: 'NOT_FOUND',
+      message: 'Resource path is missing.',
+      service: SERVICE,
+      operation: 'getLessonResourceDownloadUrl',
+      code: 'PGRST116',
+    });
+  }
+
+  // If stored as a direct external URL rather than a private bucket path,
+  // strictly validate transport safety (HTTPS only, no embedded credentials).
+  if (!res.data.storage_path && /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)) {
+    return validateDownloadUrl(path);
+  }
   if (path.startsWith('https://')) {
-    return path;
+    return validateDownloadUrl(path);
   }
 
   let signedRes;
@@ -1122,7 +1138,7 @@ export async function getLessonResourceDownloadUrl(resourceId: string): Promise<
     });
   }
 
-  return signedRes.data.signedUrl;
+  return validateDownloadUrl(signedRes.data.signedUrl);
 }
 
 export async function deleteLessonResource(resourceId: string): Promise<void> {
