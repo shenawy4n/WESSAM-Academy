@@ -314,15 +314,6 @@ export function logServiceError(serviceErr: ServiceError): void {
   });
 }
 
-function isAutomatedTestRuntime(): boolean {
-  if (typeof process === 'undefined') return false;
-  return (
-    process.env?.NODE_ENV === 'test' ||
-    Boolean(process.env?.NODE_TEST_CONTEXT) ||
-    Boolean(process.execArgv?.some((arg) => arg.includes('test')))
-  );
-}
-
 export function toServiceError(err: unknown, context: ServiceErrorContext): ServiceError {
   if (err instanceof ServiceError) {
     return err;
@@ -335,7 +326,7 @@ export function toServiceError(err: unknown, context: ServiceErrorContext): Serv
     context.fallbackMessage ||
     `Operation ${context.service}.${context.operation} failed`;
 
-  const serviceErr = new ServiceError({
+  return new ServiceError({
     category,
     message,
     service: context.service,
@@ -347,12 +338,6 @@ export function toServiceError(err: unknown, context: ServiceErrorContext): Serv
     isRetryable: category === 'NETWORK_ERROR',
     originalError: err,
   });
-
-  if (category !== 'VALIDATION_ERROR' && !isAutomatedTestRuntime()) {
-    logServiceError(serviceErr);
-  }
-
-  return serviceErr;
 }
 
 export function throwServiceError(err: unknown, context: ServiceErrorContext): never {
