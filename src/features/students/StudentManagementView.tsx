@@ -43,9 +43,16 @@ import {
   ChevronLeft,
   ChevronRight,
   BookOpen,
+  Award,
 } from 'lucide-react';
 
-export const StudentManagementView: React.FC = () => {
+interface StudentManagementViewProps {
+  onOpenAcademicRecord?: (studentId: string) => void;
+}
+
+export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
+  onOpenAcademicRecord,
+}) => {
   const { t, isRtl } = useLocale();
 
   // Data states
@@ -1015,6 +1022,20 @@ export const StudentManagementView: React.FC = () => {
                   <KeyRound className="w-3.5 h-3.5" />
                   <span>{t.students.resetPassword}</span>
                 </Button>
+                {onOpenAcademicRecord && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      onOpenAcademicRecord(selectedStudent.id);
+                    }}
+                    className="flex items-center gap-1.5 text-[#356AE6] border-blue-200 hover:bg-blue-50"
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>{isRtl ? 'السجل الأكاديمي' : 'Academic Record'}</span>
+                  </Button>
+                )}
               </div>
               <Button size="sm" variant="ghost" onClick={() => setIsDetailOpen(false)}>
                 {t.common.close}

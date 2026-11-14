@@ -31,29 +31,14 @@ import { TeacherAssignmentsView } from './features/assignments/TeacherAssignment
 import { StudentAssignmentsView } from './features/assignments/StudentAssignmentsView';
 import { MessagingWorkspace } from './features/messaging/MessagingWorkspace';
 import { parseMessageActionUrl } from './features/messaging/messageValidation';
+import { AcademicRecordsView } from './features/academicRecords/AcademicRecordsView';
+import { StudentResultsView } from './features/academicRecords/StudentResultsView';
+import { PerformanceAnalyticsView } from './features/analytics/PerformanceAnalyticsView';
+import { SystemSettingsView } from './features/settings/SystemSettingsView';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
-import {
-  Users,
-  FolderGit2,
-  BookOpen,
-  FileText,
-  Video,
-  Radio,
-  UserCheck,
-  HelpCircle,
-  FileQuestion,
-  ClipboardList,
-  CheckSquare,
-  Award,
-  BarChart3,
-  Bell,
-  Settings,
-  User,
-  PlayCircle,
-  Home,
-} from 'lucide-react';
+import { User } from 'lucide-react';
 
 function AppContent() {
   const { t, isRtl } = useLocale();
@@ -64,6 +49,7 @@ function AppContent() {
   const [currentStudentView, setCurrentStudentView] = useState<StudentView>('home');
   const [teacherNotificationTab, setTeacherNotificationTab] = useState<'announcements' | 'inbox'>('announcements');
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
+  const [pendingRecordStudentId, setPendingRecordStudentId] = useState<string | null>(null);
 
   // Strict configuration gate: never bypass to a fake preview shell when backend is unconfigured
   if (!isConfigured) {
@@ -147,7 +133,14 @@ function AppContent() {
           return <TeacherDashboard onNavigate={(v) => setCurrentTeacherView(v as TeacherView)} />;
 
         case 'students':
-          return <StudentManagementView />;
+          return (
+            <StudentManagementView
+              onOpenAcademicRecord={(studentId) => {
+                setPendingRecordStudentId(studentId);
+                setCurrentTeacherView('results');
+              }}
+            />
+          );
 
         case 'groups':
           return <GroupManagementView />;
@@ -178,34 +171,15 @@ function AppContent() {
           return <TeacherAssignmentsView initialTab="grading" />;
 
         case 'results':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.results}
-              subtitle={isRtl ? 'السجلات الأكاديمية والدرجات الإجمالية' : 'Academic transcripts and grade records'}
-              targetPhase="Phase 6 — Analytics & Finalization"
-              icon={Award}
-              description={isRtl ? 'سجل أكاديمي شامل لكل طالب يوثق الحضور، الواجبات، والاختبارات عبر الفصول.' : 'Comprehensive academic record keeping for student transcripts, attendance, and exam history.'}
-              plannedCapabilities={[
-                isRtl ? 'تقارير درجات مجمعة قابلة للطباعة والتصدير' : 'Aggregated printable grade reports',
-                isRtl ? 'سجل تاريخي غير قابل للتعديل' : 'Audit-protected academic history',
-                isRtl ? 'تتبع تطور مستوى الطالب على مدار العام' : 'Year-over-year proficiency progress tracking',
-              ]}
-            />
-          );
+          return <AcademicRecordsView initialStudentId={pendingRecordStudentId} />;
 
         case 'analytics':
           return (
-            <FeaturePlaceholderView
-              title={t.navigation.analytics}
-              subtitle={isRtl ? 'مؤشرات الأداء وتحليلات التعلم' : 'Performance analytics and cohort insights'}
-              targetPhase="Phase 6 — Analytics & Finalization"
-              icon={BarChart3}
-              description={isRtl ? 'رسوم بيانية حقيقية توضح التزام المجموعات ونقاط القوة والضعف في مهارات اللغة الإنجليزية.' : 'Real database analytics evaluating cohort engagement and language skill breakdowns.'}
-              plannedCapabilities={[
-                isRtl ? 'تحليل نسب إتقان المهارات (القواعد، المفردات، القراءة)' : 'Skill proficiency analytics (Grammar, Vocab, Reading)',
-                isRtl ? 'معدلات الحضور والتسليم في الموعد' : 'Attendance and on-time submission ratios',
-                isRtl ? 'كشف الطلاب الذين يحتاجون إلى متابعة إضافية' : 'Early identification of struggling students',
-              ]}
+            <PerformanceAnalyticsView
+              onInspectStudentRecord={(studentId) => {
+                setPendingRecordStudentId(studentId);
+                setCurrentTeacherView('results');
+              }}
             />
           );
 
@@ -253,19 +227,10 @@ function AppContent() {
           );
 
         case 'settings':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.settings}
-              subtitle={isRtl ? 'إعدادات المنصة والهوية الأكاديمية' : 'Academy system configuration'}
-              targetPhase="Phase 6 — Analytics & Finalization"
-              icon={Settings}
-              description={isRtl ? 'إدارة بيانات الأكاديمية، العام الدراسي، وإعدادات الربط التقني.' : 'Manage academy information, academic year configuration, and provider integrations.'}
-              plannedCapabilities={[
-                isRtl ? 'تحديث بيانات أكاديمية الوسام' : 'WESSAM Academy branding configuration',
-                isRtl ? 'سجل العمليات الإدارية (Audit Logs)' : 'Audit logs of administrative actions',
-                isRtl ? 'التحكم في مزودي الفيديو والحصص المباشرة' : 'Manage video and meeting provider endpoints',
-              ]}
-            />
+          return role === 'super_admin' ? (
+            <SystemSettingsView onUnauthorizedReturn={() => setCurrentTeacherView('dashboard')} />
+          ) : (
+            <UnauthorizedScreen onReturn={() => setCurrentTeacherView('dashboard')} />
           );
 
         default:
@@ -355,20 +320,7 @@ function AppContent() {
           return <StudentAssessmentsView />;
 
         case 'results':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.results}
-              subtitle={isRtl ? 'سجل الدرجات ومستوى الأداء' : 'Academic transcript and grades'}
-              targetPhase="Phase 6 — Analytics & Finalization"
-              icon={Award}
-              description={isRtl ? 'استعراض درجاتك في جميع الاختبارات والواجبات ونسبة الحضور.' : 'View your comprehensive grades, attendance record, and teacher praise.'}
-              plannedCapabilities={[
-                isRtl ? 'كشف درجات تفصيلي لكل مقرر' : 'Itemized course gradebook',
-                isRtl ? 'نسبة حضور الحصص المباشرة' : 'Live attendance percentage',
-                isRtl ? 'تتبع تطور مستواك في اللغة الإنجليزية' : 'Skill progression metrics over time',
-              ]}
-            />
-          );
+          return <StudentResultsView />;
 
         case 'messages':
           return (

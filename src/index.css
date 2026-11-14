@@ -38,3 +38,20 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-academic-report,
+  #printable-academic-report * {
+    visibility: visible;
+  }
+  #printable-academic-report {
+    position: fixed;
+    inset: 0;
+    padding: 24px;
+    background: #ffffff;
+    overflow: visible;
+  }
+}

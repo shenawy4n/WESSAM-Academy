@@ -66,7 +66,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'analytics' as TeacherView, label: t.navigation.analytics, icon: BarChart3 },
     { id: 'messages' as TeacherView, label: t.navigation.studentMessages, icon: MessageSquare },
     { id: 'notifications' as TeacherView, label: t.navigation.notifications, icon: Bell },
-    { id: 'settings' as TeacherView, label: t.navigation.settings, icon: Settings },
+    ...(role === 'super_admin'
+      ? [{ id: 'settings' as TeacherView, label: t.navigation.settings, icon: Settings }]
+      : []),
   ];
 
   const studentNavItems = [
