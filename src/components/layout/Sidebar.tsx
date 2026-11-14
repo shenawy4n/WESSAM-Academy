@@ -22,6 +22,7 @@ import {
   CheckSquare,
   Award,
   BarChart3,
+  MessageSquare,
   Bell,
   Settings,
   Home,
@@ -63,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'submissions' as TeacherView, label: t.navigation.submissionsGrading, icon: CheckSquare },
     { id: 'results' as TeacherView, label: t.navigation.results, icon: Award },
     { id: 'analytics' as TeacherView, label: t.navigation.analytics, icon: BarChart3 },
+    { id: 'messages' as TeacherView, label: t.navigation.studentMessages, icon: MessageSquare },
     { id: 'notifications' as TeacherView, label: t.navigation.notifications, icon: Bell },
     { id: 'settings' as TeacherView, label: t.navigation.settings, icon: Settings },
   ];
@@ -76,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'assignments' as StudentView, label: t.navigation.assignments, icon: ClipboardList },
     { id: 'quizzes' as StudentView, label: t.navigation.quizzesExams, icon: FileQuestion },
     { id: 'results' as StudentView, label: t.navigation.results, icon: Award },
+    { id: 'messages' as StudentView, label: t.navigation.messageTeacher, icon: MessageSquare },
     { id: 'notifications' as StudentView, label: t.navigation.notifications, icon: Bell },
     { id: 'profile' as StudentView, label: t.navigation.myProfile, icon: User },
   ];

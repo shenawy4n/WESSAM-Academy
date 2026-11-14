@@ -75,6 +75,8 @@ export interface Translations {
     submissionsGrading: string;
     results: string;
     analytics: string;
+    studentMessages: string;
+    messageTeacher: string;
     notifications: string;
     settings: string;
     home: string;
@@ -401,6 +403,8 @@ export const translations: Record<Language, Translations> = {
       submissionsGrading: 'التصحيح والتقييم',
       results: 'السجل الأكاديمي',
       analytics: 'مؤشرات الأداء',
+      studentMessages: 'رسائل الطلاب',
+      messageTeacher: 'مراسلة المدرس',
       notifications: 'الإشعارات',
       settings: 'إعدادات النظام',
       home: 'الرئيسية',
@@ -725,6 +729,8 @@ export const translations: Record<Language, Translations> = {
       submissionsGrading: 'Submissions & Grading',
       results: 'Academic Results',
       analytics: 'Analytics',
+      studentMessages: 'Student Messages',
+      messageTeacher: 'Message Teacher',
       notifications: 'Notifications',
       settings: 'Settings',
       home: 'Home',

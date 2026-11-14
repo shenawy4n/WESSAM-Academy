@@ -26,8 +26,10 @@ import {
   GraduationCap,
   Clock,
   Video,
+  MessageSquare,
 } from 'lucide-react';
 import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
+import { messagingService } from '../messaging/messagingService';
 
 interface MetricCount {
   totalStudents: number;
@@ -63,6 +65,7 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
     pendingReviews: 0,
   });
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionItem[]>([]);
+  const [unreadMessages, setUnreadMessages] = useState<number>(0);
 
   const loadMetrics = useCallback(async () => {
     setLoading(true);
@@ -141,6 +144,27 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   useEffect(() => {
     loadMetrics();
   }, [loadMetrics]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    const loadUnread = () => {
+      messagingService
+        .getUnreadMessagesCount()
+        .then((count) => {
+          if (active) setUnreadMessages(count);
+        })
+        .catch(() => {
+          // Non-fatal on dashboard widget
+        });
+    };
+    loadUnread();
+    const unsub = messagingService.subscribeToMessages(user.id, loadUnread);
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [user?.id]);
 
   const metricCards = [
     {
@@ -387,8 +411,48 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
           </Card>
         </div>
 
-        {/* Sidebar Column: Recent Activity & Academic Status */}
+        {/* Sidebar Column: Student Messages & Recent Activity */}
         <div className="space-y-6">
+          <Card>
+            <CardHeader
+              title={t.navigation.studentMessages}
+              subtitle={isRtl ? 'الاستفسارات المباشرة من الطلاب' : 'Direct inquiries from students'}
+              action={
+                unreadMessages > 0 ? (
+                  <span className="bg-[#356AE6] text-white text-[11px] font-bold px-2 py-0.5 rounded-md">
+                    {unreadMessages} {isRtl ? 'جديد' : 'new'}
+                  </span>
+                ) : undefined
+              }
+            />
+            <CardContent>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-[#14243A] text-[#D8B96C] flex items-center justify-center shrink-0">
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-[#14243A]">
+                      {unreadMessages > 0
+                        ? isRtl
+                          ? `${unreadMessages} رسالة جديدة من الطلاب`
+                          : `${unreadMessages} unread student message(s)`
+                        : isRtl
+                        ? 'صندوق رسائل الطلاب'
+                        : 'Student Inbox'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {isRtl ? 'مراجعة الرسائل والرد مع المرفقات' : 'Review threads and reply with attachments'}
+                    </p>
+                  </div>
+                </div>
+                <Button variant="primary" size="sm" onClick={() => onNavigate('messages')}>
+                  {isRtl ? 'فتح' : 'Open'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader
               title={t.teacherDashboard.recentActivity}

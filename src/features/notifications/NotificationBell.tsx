@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCheck, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Bell, CheckCheck, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useLocale } from '../../hooks/useLocale';
 import { useAuth } from '../auth/AuthContext';
 import { notificationService } from './notificationService';
@@ -30,38 +30,94 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
   const [loadError, setLoadError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const activeSessionRef = useRef<{ userId?: string; generation: number }>({
+    userId: user?.id,
+    generation: 0,
+  });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    const currentUserId = user?.id;
+    const generation = activeSessionRef.current.generation;
+    if (!currentUserId) {
+      setUnreadCount(0);
+      setRecentNotifications([]);
+      setLoadError(null);
+      return;
+    }
+
     setLoadError(null);
     try {
       const [count, listRes] = await Promise.all([
         notificationService.getUnreadCount(),
         notificationService.fetchNotifications({ limit: 5 }),
       ]);
+      if (
+        activeSessionRef.current.userId !== currentUserId ||
+        activeSessionRef.current.generation !== generation
+      ) {
+        return;
+      }
       setUnreadCount(count);
       setRecentNotifications(listRes.notifications);
     } catch (err) {
+      if (
+        activeSessionRef.current.userId !== currentUserId ||
+        activeSessionRef.current.generation !== generation
+      ) {
+        return;
+      }
       setLoadError(err);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
+    const nextGeneration = activeSessionRef.current.generation + 1;
+    activeSessionRef.current = {
+      userId: user?.id,
+      generation: nextGeneration,
+    };
+    let isActive = true;
+
     loadData();
 
-    // Subscribe to realtime changes if user exists
-    if (user?.id) {
-      const unsubscribe = notificationService.subscribeToNotifications(
-        user.id,
-        () => {
+    if (!user?.id) {
+      return () => {
+        isActive = false;
+      };
+    }
+
+    const unsubscribe = notificationService.subscribeToNotifications(
+      user.id,
+      () => {
+        if (isActive) {
           loadData();
-        },
-        (err) => {
+        }
+      },
+      (err) => {
+        if (isActive) {
           setLoadError(err);
         }
-      );
-      return () => unsubscribe();
+      },
+      (status) => {
+        if (isActive && status === 'SUBSCRIBED') {
+          setLoadError(null);
+        }
+      }
+    );
+
+    return () => {
+      isActive = false;
+      activeSessionRef.current.generation += 1;
+      unsubscribe();
+    };
+  }, [user?.id, loadData]);
+
+  const handleRetryConnection = () => {
+    if (user?.id) {
+      notificationService.retryNotificationsSubscription(user.id);
     }
-  }, [user?.id]);
+    loadData();
+  };
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -175,7 +231,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
           <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
             {loadError ? (
               <div className="p-3">
-                <ErrorState variant="banner" error={loadError} isRtl={isRtl} onRetry={loadData} />
+                <ErrorState variant="banner" error={loadError} isRtl={isRtl} onRetry={handleRetryConnection} />
               </div>
             ) : recentNotifications.length === 0 ? (
               <div className="py-8 text-center text-slate-400 text-xs">

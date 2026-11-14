@@ -3,13 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Bell,
   CheckCheck,
   Check,
   Search,
-  Filter,
   RefreshCw,
   ExternalLink,
   AlertTriangle,
@@ -53,42 +52,98 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
+  const [realtimeError, setRealtimeError] = useState<unknown>(null);
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const [category, setCategory] = useState<NotificationCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const activeSessionRef = useRef<{ userId?: string; generation: number }>({
+    userId: user?.id,
+    generation: 0,
+  });
 
-  const loadData = async (showLoading = true) => {
+  const loadData = useCallback(async (showLoading = true) => {
+    const currentUserId = user?.id;
+    const generation = activeSessionRef.current.generation;
+    if (!currentUserId) {
+      setNotifications([]);
+      setIsLoading(false);
+      setIsRefreshing(false);
+      return;
+    }
+
     if (showLoading) setIsLoading(true);
     else setIsRefreshing(true);
     setLoadError(null);
 
     try {
       const res = await notificationService.fetchNotifications({ limit: 100 });
+      if (
+        activeSessionRef.current.userId !== currentUserId ||
+        activeSessionRef.current.generation !== generation
+      ) {
+        return;
+      }
       setNotifications(res.notifications);
     } catch (err) {
+      if (
+        activeSessionRef.current.userId !== currentUserId ||
+        activeSessionRef.current.generation !== generation
+      ) {
+        return;
+      }
       setLoadError(err);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-
-    if (user?.id) {
-      const unsubscribe = notificationService.subscribeToNotifications(
-        user.id,
-        () => {
-          loadData(false);
-        },
-        (err) => {
-          setActionError(err);
-        }
-      );
-      return () => unsubscribe();
+      if (
+        activeSessionRef.current.userId === currentUserId &&
+        activeSessionRef.current.generation === generation
+      ) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    const nextGeneration = activeSessionRef.current.generation + 1;
+    activeSessionRef.current = {
+      userId: user?.id,
+      generation: nextGeneration,
+    };
+    let isActive = true;
+
+    loadData();
+
+    if (!user?.id) {
+      return () => {
+        isActive = false;
+      };
+    }
+
+    const unsubscribe = notificationService.subscribeToNotifications(
+      user.id,
+      () => {
+        if (isActive) {
+          loadData(false);
+        }
+      },
+      (err) => {
+        if (isActive) {
+          setRealtimeError(err);
+        }
+      },
+      (status) => {
+        if (isActive && status === 'SUBSCRIBED') {
+          setRealtimeError(null);
+        }
+      }
+    );
+
+    return () => {
+      isActive = false;
+      activeSessionRef.current.generation += 1;
+      unsubscribe();
+    };
+  }, [user?.id, loadData]);
 
   const handleMarkAsRead = async (id: string, e?: React.MouseEvent): Promise<boolean> => {
     if (e) e.stopPropagation();
@@ -150,6 +205,8 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
         return <ShieldAlert className="w-4 h-4 text-rose-600" />;
       case 'teacher_message':
         return <MessageSquare className="w-4 h-4 text-purple-600" />;
+      case 'student_message':
+        return <MessageSquare className="w-4 h-4 text-indigo-600" />;
       case 'general':
       default:
         return <Bell className="w-4 h-4 text-slate-600" />;
@@ -164,7 +221,8 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
     { id: 'quiz_result', labelEn: 'Results', labelAr: 'النتائج' },
     { id: 'new_lesson', labelEn: 'Lessons', labelAr: 'الدروس' },
     { id: 'new_material', labelEn: 'Materials', labelAr: 'المواد الدراسية' },
-    { id: 'teacher_message', labelEn: 'Messages', labelAr: 'رسائل المعلم' },
+    { id: 'teacher_message', labelEn: 'Teacher Messages', labelAr: 'رسائل المعلم' },
+    { id: 'student_message', labelEn: 'Student Messages', labelAr: 'رسائل الطلاب' },
   ];
 
   return (
@@ -312,6 +370,21 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
 
       {/* Notifications List */}
       <div className="space-y-3">
+        {Boolean(realtimeError) && (
+          <ErrorState
+            variant="banner"
+            error={realtimeError}
+            isRtl={isRtl}
+            onRetry={() => {
+              setRealtimeError(null);
+              if (user?.id) {
+                notificationService.retryNotificationsSubscription(user.id);
+              }
+              loadData(false);
+            }}
+            onDismiss={() => setRealtimeError(null)}
+          />
+        )}
         {Boolean(actionError) && (
           <ErrorState
             variant="banner"

@@ -21,6 +21,8 @@ export function resolveCategoryLabel(category: NotificationCategory, isRtl: bool
       return isRtl ? 'نتيجة اختبار' : 'Assessment Result';
     case 'teacher_message':
       return isRtl ? 'رسالة المعلم' : 'Teacher Message';
+    case 'student_message':
+      return isRtl ? 'رسالة الطالب' : 'Student Message';
     case 'account_alert':
       return isRtl ? 'تنبيه الحساب' : 'Account Alert';
     default:
@@ -46,6 +48,8 @@ export function resolveCategoryBadge(category: NotificationCategory): {
       return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
     case 'teacher_message':
       return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' };
+    case 'student_message':
+      return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' };
     case 'general':
     default:
       return { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' };

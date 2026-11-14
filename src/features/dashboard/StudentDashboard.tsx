@@ -22,10 +22,12 @@ import {
   GraduationCap,
   Calendar,
   Video,
+  MessageSquare,
 } from 'lucide-react';
 import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
 import { getAuthorizedMeetingLink } from '../liveSessions/liveSessionsService';
 import { fetchStudentAssignments } from '../assignments/assignmentService';
+import { messagingService } from '../messaging/messagingService';
 
 interface StudentUpcomingSession {
   id: string;
@@ -46,6 +48,7 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   const [assignmentsCount, setAssignmentsCount] = useState<number>(0);
   const [upcomingSessions, setUpcomingSessions] = useState<StudentUpcomingSession[]>([]);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [unreadMessages, setUnreadMessages] = useState<number>(0);
 
   const loadStudentData = useCallback(async () => {
     setLoading(true);
@@ -104,6 +107,27 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
   useEffect(() => {
     loadStudentData();
   }, [loadStudentData]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    const loadUnread = () => {
+      messagingService
+        .getUnreadMessagesCount()
+        .then((count) => {
+          if (active) setUnreadMessages(count);
+        })
+        .catch(() => {
+          // Non-fatal on dashboard widget if messaging migration not yet applied
+        });
+    };
+    loadUnread();
+    const unsub = messagingService.subscribeToMessages(user.id, loadUnread);
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [user?.id]);
 
   const handleJoinClass = async (sessionId: string) => {
     setJoinError(null);
@@ -378,6 +402,52 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
                   className="text-xs shrink-0"
                 >
                   {isRtl ? 'مشاهدة' : 'Watch'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Message Teacher Card */}
+          <Card>
+            <CardHeader
+              title={t.navigation.messageTeacher}
+              subtitle={isRtl ? 'التواصل المباشر مع معلمك' : 'Direct communication with your teacher'}
+              action={
+                unreadMessages > 0 ? (
+                  <span className="bg-[#356AE6] text-white text-[11px] font-bold px-2 py-0.5 rounded-md">
+                    {unreadMessages} {isRtl ? 'جديد' : 'new'}
+                  </span>
+                ) : undefined
+              }
+            />
+            <CardContent>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-[#14243A] text-[#D8B96C] flex items-center justify-center shrink-0">
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h5 className="text-xs font-bold text-slate-900">
+                      {isRtl ? 'إرسال سؤال أو مرفق للمعلم' : 'Ask a Question or Share Files'}
+                    </h5>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {unreadMessages > 0
+                        ? isRtl
+                          ? `لديك ${unreadMessages} رسالة غير مقروءة`
+                          : `You have ${unreadMessages} unread message(s)`
+                        : isRtl
+                        ? 'افتح صندوق الرسائل للتواصل الخاص'
+                        : 'Open private messaging with your teacher'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => onNavigate('messages')}
+                  className="text-xs shrink-0"
+                >
+                  {isRtl ? 'فتح الرسائل' : 'Messages'}
                 </Button>
               </div>
             </CardContent>

@@ -20,6 +20,7 @@ export type TeacherView =
   | 'submissions'
   | 'results'
   | 'analytics'
+  | 'messages'
   | 'notifications'
   | 'settings';
 
@@ -32,6 +33,7 @@ export type StudentView =
   | 'assignments'
   | 'quizzes'
   | 'results'
+  | 'messages'
   | 'notifications'
   | 'profile';
 

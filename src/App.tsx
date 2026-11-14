@@ -29,6 +29,8 @@ import { StudentVideoLibraryView } from './features/videoLibrary/StudentVideoLib
 import { QuestionBankView } from './features/questionBank/QuestionBankView';
 import { TeacherAssignmentsView } from './features/assignments/TeacherAssignmentsView';
 import { StudentAssignmentsView } from './features/assignments/StudentAssignmentsView';
+import { MessagingWorkspace } from './features/messaging/MessagingWorkspace';
+import { parseMessageActionUrl } from './features/messaging/messageValidation';
 import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
@@ -61,6 +63,7 @@ function AppContent() {
   const [currentTeacherView, setCurrentTeacherView] = useState<TeacherView>('dashboard');
   const [currentStudentView, setCurrentStudentView] = useState<StudentView>('home');
   const [teacherNotificationTab, setTeacherNotificationTab] = useState<'announcements' | 'inbox'>('announcements');
+  const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
 
   // Strict configuration gate: never bypass to a fake preview shell when backend is unconfigured
   if (!isConfigured) {
@@ -113,6 +116,8 @@ function AppContent() {
           return t.navigation.results;
         case 'analytics':
           return t.navigation.analytics;
+        case 'messages':
+          return t.navigation.studentMessages;
         case 'notifications':
           return t.navigation.notifications;
         case 'settings':
@@ -120,6 +125,20 @@ function AppContent() {
         default:
           return t.navigation.dashboard;
       }
+    };
+
+    const handleTeacherNavigateToResource = (url: string) => {
+      const convId = parseMessageActionUrl(url);
+      if (convId || url.startsWith('/messages')) {
+        setPendingConversationId(convId);
+        setCurrentTeacherView('messages');
+        return;
+      }
+      if (url.includes('/courses')) setCurrentTeacherView('courses');
+      else if (url.includes('/live-sessions')) setCurrentTeacherView('live-sessions');
+      else if (url.includes('/assessments')) setCurrentTeacherView('quizzes');
+      else if (url.includes('/assignments')) setCurrentTeacherView('assignments');
+      else if (url.includes('/students')) setCurrentTeacherView('students');
     };
 
     const renderTeacherView = () => {
@@ -190,6 +209,15 @@ function AppContent() {
             />
           );
 
+        case 'messages':
+          return (
+            <MessagingWorkspace
+              mode="teacher"
+              initialConversationId={pendingConversationId}
+              onClearInitialConversation={() => setPendingConversationId(null)}
+            />
+          );
+
         case 'notifications':
           return (
             <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -219,14 +247,7 @@ function AppContent() {
               {teacherNotificationTab === 'announcements' ? (
                 <AnnouncementManagementView />
               ) : (
-                <NotificationCenterView
-                  onNavigateToResource={(url) => {
-                    if (url.includes('/courses')) setCurrentTeacherView('courses');
-                    else if (url.includes('/live-sessions')) setCurrentTeacherView('live-sessions');
-                    else if (url.includes('/assessments')) setCurrentTeacherView('quizzes');
-                    else if (url.includes('/students')) setCurrentTeacherView('students');
-                  }}
-                />
+                <NotificationCenterView onNavigateToResource={handleTeacherNavigateToResource} />
               )}
             </div>
           );
@@ -257,6 +278,7 @@ function AppContent() {
         currentView={currentTeacherView}
         onSelectView={(v) => setCurrentTeacherView(v as TeacherView)}
         pageTitle={getPageTitle(currentTeacherView)}
+        onNavigateToResource={handleTeacherNavigateToResource}
       >
         {renderTeacherView()}
       </AppLayout>
@@ -283,6 +305,8 @@ function AppContent() {
           return t.navigation.quizzesExams;
         case 'results':
           return t.navigation.results;
+        case 'messages':
+          return t.navigation.messageTeacher;
         case 'notifications':
           return t.navigation.notifications;
         case 'profile':
@@ -290,6 +314,19 @@ function AppContent() {
         default:
           return t.navigation.home;
       }
+    };
+
+    const handleStudentNavigateToResource = (url: string) => {
+      const convId = parseMessageActionUrl(url);
+      if (convId || url.startsWith('/messages')) {
+        setPendingConversationId(convId);
+        setCurrentStudentView('messages');
+        return;
+      }
+      if (url.includes('/courses')) setCurrentStudentView('courses');
+      else if (url.includes('/live-sessions')) setCurrentStudentView('live-sessions');
+      else if (url.includes('/assessments')) setCurrentStudentView('quizzes');
+      else if (url.includes('/assignments')) setCurrentStudentView('assignments');
     };
 
     const renderStudentView = () => {
@@ -333,16 +370,17 @@ function AppContent() {
             />
           );
 
-        case 'notifications':
+        case 'messages':
           return (
-            <NotificationCenterView
-              onNavigateToResource={(url) => {
-                if (url.includes('/courses')) setCurrentStudentView('courses');
-                else if (url.includes('/live-sessions')) setCurrentStudentView('live-sessions');
-                else if (url.includes('/assessments')) setCurrentStudentView('quizzes');
-              }}
+            <MessagingWorkspace
+              mode="student"
+              initialConversationId={pendingConversationId}
+              onClearInitialConversation={() => setPendingConversationId(null)}
             />
           );
+
+        case 'notifications':
+          return <NotificationCenterView onNavigateToResource={handleStudentNavigateToResource} />;
 
         case 'profile':
           return (
@@ -370,6 +408,7 @@ function AppContent() {
         currentView={currentStudentView}
         onSelectView={(v) => setCurrentStudentView(v as StudentView)}
         pageTitle={getPageTitle(currentStudentView)}
+        onNavigateToResource={handleStudentNavigateToResource}
       >
         {renderStudentView()}
       </AppLayout>

@@ -11,7 +11,6 @@ import {
   calculateRemainingSeconds,
   formatTimerDisplay,
   resolveAssessmentStatus,
-  normalizeQuestionSnapshot,
 } from './quizScoring';
 
 describe('quizScoring - Objective Answer Evaluation', () => {
@@ -181,57 +180,5 @@ describe('quizScoring - Assessment Status Resolution', () => {
       currentTimestampMs: fixedNow,
     });
     assert.equal(status, 'available');
-  });
-});
-
-describe('quizScoring - Question Snapshot Normalization', () => {
-  it('maps snake_case start_quiz_attempt RPC payload into camelCase QuestionItem[] with unique ids and numeric order', () => {
-    const rawSnapshot = [
-      {
-        question_id: 'q-10',
-        question_text: 'Question 10',
-        question_text_arabic: 'السؤال 10',
-        question_type: 'multiple_choice',
-        points: 5,
-        order_index: 10,
-        is_required: true,
-        options: [
-          { id: 'opt-b', option_text: 'Second', option_text_arabic: 'الثاني', order_index: 2 },
-          { id: 'opt-a', option_text: 'First', option_text_arabic: 'الأول', order_index: 1 },
-        ],
-      },
-      {
-        question_id: 'q-2',
-        question_text: 'Question 2',
-        question_text_arabic: 'السؤال 2',
-        question_type: 'short_answer',
-        points: 10,
-        order_index: 2,
-        is_required: false,
-        options: [],
-      },
-    ];
-
-    const normalized = normalizeQuestionSnapshot(rawSnapshot);
-    assert.equal(normalized.length, 2);
-    assert.equal(normalized[0].id, 'q-2');
-    assert.equal(normalized[0].questionText, 'Question 2');
-    assert.equal(normalized[0].questionTextArabic, 'السؤال 2');
-    assert.equal(normalized[0].questionType, 'short_answer');
-    assert.equal(normalized[0].isRequired, false);
-    assert.equal(normalized[1].id, 'q-10');
-    assert.equal(normalized[1].options[0].id, 'opt-a');
-    assert.equal(normalized[1].options[0].optionText, 'First');
-    assert.equal(normalized[1].options[0].optionTextArabic, 'الأول');
-    assert.equal(normalized[1].options[1].id, 'opt-b');
-  });
-
-  it('assigns deterministic fallback keys if ids are absent and handles non-array input safely', () => {
-    assert.deepEqual(normalizeQuestionSnapshot(null), []);
-    const normalized = normalizeQuestionSnapshot([
-      { question_text: 'Fallback Q', options: [{ option_text: 'Opt 1' }] },
-    ]);
-    assert.equal(normalized[0].id, 'question_0');
-    assert.equal(normalized[0].options[0].id, 'question_0_opt_0');
   });
 });

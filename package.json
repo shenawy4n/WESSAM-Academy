@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test src/lib/errors/serviceError.test.ts src/features/__tests__/serviceCleanup.test.ts src/features/courses/videoUtils.test.ts src/lib/dateUtils.test.ts src/features/quizzes/quizScoring.test.ts src/features/notifications/notificationUtils.test.ts src/features/videoLibrary/videoLibraryUtils.test.ts src/features/questionBank/questionBankUtils.test.ts src/features/assignments/assignmentUtils.test.ts",
+    "test": "tsx --test src/lib/errors/serviceError.test.ts src/features/__tests__/serviceCleanup.test.ts src/features/courses/videoUtils.test.ts src/lib/dateUtils.test.ts src/features/quizzes/quizScoring.test.ts src/features/notifications/notificationUtils.test.ts src/features/notifications/notificationRealtime.test.ts src/features/messaging/messaging.test.ts src/features/videoLibrary/videoLibraryUtils.test.ts src/features/questionBank/questionBankUtils.test.ts src/features/assignments/assignmentUtils.test.ts",
     "bootstrap:super-admin": "tsx scripts/bootstrap-super-admin.ts"
   },
   "dependencies": {

@@ -366,7 +366,6 @@ export const StudentAssessmentsView: React.FC = () => {
       {/* Quiz Runner Modal */}
       {runnerOpen && activeAttemptId && (
         <QuizRunnerModal
-          key={activeAttemptId}
           isOpen={runnerOpen}
           onClose={() => setRunnerOpen(false)}
           attemptId={activeAttemptId}

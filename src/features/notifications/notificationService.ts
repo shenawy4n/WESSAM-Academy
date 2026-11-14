@@ -16,6 +16,7 @@ import {
   AppNotification,
   NotificationCategory,
 } from './types';
+import { realtimeManager, RealtimeChannelStatus } from './realtimeManager';
 
 const SERVICE = 'notificationService';
 
@@ -168,13 +169,18 @@ export const notificationService = {
   },
 
   /**
-   * Setup Realtime subscription on notification_recipients.
+   * Setup safe, ref-counted Realtime subscription on notification_recipients scoped to userId.
    */
   subscribeToNotifications(
     userId: string,
     onUpdate: () => void,
-    onError?: (error: ServiceError) => void
+    onError?: (error: ServiceError) => void,
+    onStatusChange?: (status: RealtimeChannelStatus) => void
   ): () => void {
+    if (!userId) {
+      return () => {};
+    }
+
     const client = getSupabaseClient();
     if (!client) {
       onError?.(
@@ -189,39 +195,29 @@ export const notificationService = {
     }
 
     try {
-      const channel = client
-        .channel(`user_notifications_${userId}`)
-        .on(
-          'postgres_changes',
+      const handle = realtimeManager.subscribe({
+        client,
+        scope: 'notifications',
+        userId,
+        baseTopic: `user_notifications_${userId}`,
+        filters: [
           {
             event: '*',
             schema: 'public',
             table: 'notification_recipients',
             filter: `recipient_id=eq.${userId}`,
           },
-          () => {
+        ],
+        listener: {
+          onUpdate: () => {
             onUpdate();
-          }
-        )
-        .subscribe((status, err) => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            onError?.(
-              toServiceError(err || new Error(`Realtime subscription status: ${status}`), {
-                service: SERVICE,
-                operation: 'subscribeToNotifications',
-                fallbackMessage: 'Failed to subscribe to realtime notifications',
-              })
-            );
-          }
-        });
+          },
+          onError,
+          onStatusChange,
+        },
+      });
 
-      return () => {
-        try {
-          client.removeChannel(channel);
-        } catch {
-          // cleanup only on unmount
-        }
-      };
+      return handle.unsubscribe;
     } catch (err) {
       onError?.(
         toServiceError(err, {
@@ -232,6 +228,15 @@ export const notificationService = {
       );
       return () => {};
     }
+  },
+
+  /**
+   * Re-establish the realtime notification channel for a user after a recoverable connection error.
+   */
+  retryNotificationsSubscription(userId: string): void {
+    const client = getSupabaseClient();
+    if (!client || !userId) return;
+    realtimeManager.retry(client, 'notifications', userId);
   },
 
   // ---------------------------------------------------------------------------

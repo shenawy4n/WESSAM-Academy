@@ -11,6 +11,7 @@ export type NotificationCategory =
   | 'quiz_published'
   | 'quiz_result'
   | 'teacher_message'
+  | 'student_message'
   | 'account_alert';
 
 export type NotificationPriority = 'normal' | 'important' | 'urgent';

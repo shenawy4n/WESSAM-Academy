@@ -13,6 +13,7 @@ interface AppLayoutProps {
   currentView: string;
   onSelectView: (view: any) => void;
   pageTitle: string;
+  onNavigateToResource?: (url: string) => void;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -20,6 +21,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   currentView,
   onSelectView,
   pageTitle,
+  onNavigateToResource,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { isRtl } = useLocale();
@@ -44,6 +46,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
           pageTitle={pageTitle}
           onOpenNotifications={() => onSelectView('notifications')}
+          onNavigateToResource={onNavigateToResource}
         />
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {children}
