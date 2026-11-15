@@ -17,7 +17,6 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   CheckCircle,
   PlayCircle,
   Clock,

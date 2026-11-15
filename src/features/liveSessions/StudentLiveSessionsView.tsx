@@ -25,13 +25,13 @@ import {
   isSessionUpcoming,
   calculateAttendanceMetrics,
 } from '../../lib/dateUtils';
+import { openSafeExternalUrl } from '../../lib/safeDownload';
 import {
   Radio,
   Calendar,
   Clock,
   Video,
   CheckCircle2,
-  AlertCircle,
   Clock4,
   XCircle,
   HelpCircle,
@@ -88,7 +88,7 @@ export const StudentLiveSessionsView: React.FC = () => {
       setJoinError(null);
       const link = await getAuthorizedMeetingLink(sessionId);
       if (link) {
-        window.open(link, '_blank', 'noopener,noreferrer');
+        openSafeExternalUrl(link);
       } else {
         throw new ServiceError({
           category: 'NOT_FOUND',

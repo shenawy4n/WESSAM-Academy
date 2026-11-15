@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase/client';
 import { UserProfile, UserRole, StudentAcademicProfile, AuthSession } from '../../types/auth';
 
@@ -31,105 +31,128 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isConfigured = isSupabaseConfigured();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [studentProfile, setStudentProfile] = useState<StudentAcademicProfile | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => Boolean(isConfigured && supabase));
   const [error, setError] = useState<string | null>(null);
+
+  const isMountedRef = useRef<boolean>(true);
+  const inFlightProfileFetchRef = useRef<Map<string, Promise<void>>>(new Map());
 
   const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
     if (!supabase) return;
-    try {
-      setError(null);
-      const { data, error: profileErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+    const existing = inFlightProfileFetchRef.current.get(userId);
+    if (existing) {
+      return existing;
+    }
 
-      if (profileErr) {
-        console.error('Error fetching profile:', profileErr.message);
-        setError(profileErr.message || 'Failed to load user profile.');
-        return;
-      }
+    const request = (async () => {
+      try {
+        if (isMountedRef.current) setError(null);
+        const { data, error: profileErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-      if (data) {
-        if (data.status !== 'active') {
-          // Account suspended or inactive - terminate session
-          console.warn('User account is inactive or suspended:', data.status);
-          await supabase.auth.signOut();
-          setUser(null);
-          setStudentProfile(null);
-          setError('This account has been suspended or deactivated. Contact academy administration.');
+        if (!isMountedRef.current) return;
+
+        if (profileErr) {
+          console.error('Error fetching profile:', profileErr.message);
+          setError(profileErr.message || 'Failed to load user profile.');
           return;
         }
 
-        setUser({
-          id: data.id,
-          role: data.role as UserRole,
-          fullName: data.full_name || 'Mr. Wessam Ibrahim Draz',
-          fullNameArabic: data.full_name_arabic || 'أ. وسام إبراهيم دراز',
-          email: data.email || userEmail,
-          phone: data.phone,
-          avatarUrl: data.avatar_url,
-          status: data.status,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        });
+        if (data) {
+          if (data.status !== 'active') {
+            // Account suspended or inactive - terminate session
+            console.warn('User account is inactive or suspended:', data.status);
+            await supabase.auth.signOut();
+            if (!isMountedRef.current) return;
+            setUser(null);
+            setStudentProfile(null);
+            setError('This account has been suspended or deactivated. Contact academy administration.');
+            return;
+          }
 
-        if (data.role === 'student') {
-          const { data: studentData, error: studentErr } = await supabase
-            .from('student_academic_profiles')
-            .select('*, groups(name, name_arabic)')
-            .eq('profile_id', userId)
-            .maybeSingle();
+          setUser({
+            id: data.id,
+            role: data.role as UserRole,
+            fullName: data.full_name || data.email || userEmail || '',
+            fullNameArabic: data.full_name_arabic || data.full_name || data.email || '',
+            email: data.email || userEmail,
+            phone: data.phone,
+            avatarUrl: data.avatar_url,
+            status: data.status,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+          });
 
-          if (studentErr) {
-            console.error('Error fetching student academic profile:', studentErr.message);
-            setError(studentErr.message || 'Failed to load student academic profile.');
-          } else if (studentData) {
-            setStudentProfile({
-              id: studentData.id,
-              profileId: studentData.profile_id,
-              studentNumber: studentData.student_number,
-              username: studentData.username,
-              groupId: studentData.group_id,
-              groupName: studentData.groups?.name_arabic || studentData.groups?.name,
-              enrolledAt: studentData.enrolled_at,
-              status: studentData.status,
-              notes: studentData.notes,
-            });
+          if (data.role === 'student') {
+            const { data: studentData, error: studentErr } = await supabase
+              .from('student_academic_profiles')
+              .select('*, groups(name, name_arabic)')
+              .eq('profile_id', userId)
+              .maybeSingle();
+
+            if (!isMountedRef.current) return;
+
+            if (studentErr) {
+              console.error('Error fetching student academic profile:', studentErr.message);
+              setError(studentErr.message || 'Failed to load student academic profile.');
+            } else if (studentData) {
+              setStudentProfile({
+                id: studentData.id,
+                profileId: studentData.profile_id,
+                studentNumber: studentData.student_number,
+                username: studentData.username,
+                groupId: studentData.group_id,
+                groupName: studentData.groups?.name_arabic || studentData.groups?.name,
+                enrolledAt: studentData.enrolled_at,
+                status: studentData.status,
+                notes: studentData.notes,
+              });
+            } else {
+              setStudentProfile(null);
+            }
           } else {
             setStudentProfile(null);
           }
-        } else {
-          setStudentProfile(null);
         }
+      } catch (err: unknown) {
+        if (!isMountedRef.current) return;
+        const msg = err instanceof Error ? err.message : 'Failed to load profile.';
+        console.error('Failed to load profile:', err);
+        setError(msg);
+      } finally {
+        inFlightProfileFetchRef.current.delete(userId);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to load profile.';
-      console.error('Failed to load profile:', err);
-      setError(msg);
-    }
+    })();
+
+    inFlightProfileFetchRef.current.set(userId, request);
+    return request;
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     if (!isConfigured || !supabase) {
-      setIsLoading(false);
-      return;
+      return () => {
+        isMountedRef.current = false;
+      };
     }
 
     const client = supabase;
-    let isMounted = true;
 
     // Restore existing session
     const restoreSession = async () => {
       try {
         const { data: { session } } = await client.auth.getSession();
-        if (session?.user && isMounted) {
+        if (session?.user && isMountedRef.current) {
           await fetchProfile(session.user.id, session.user.email);
         }
       } catch (err) {
         console.error('Session restoration error:', err);
       } finally {
-        if (isMounted) {
+        if (isMountedRef.current) {
           setIsLoading(false);
         }
       }
@@ -140,19 +163,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!isMountedRef.current) return;
       if (session?.user) {
         await fetchProfile(session.user.id, session.user.email);
       } else {
         setUser(null);
         setStudentProfile(null);
       }
-      if (isMounted) {
+      if (isMountedRef.current) {
         setIsLoading(false);
       }
     });
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
       subscription.unsubscribe();
     };
   }, [isConfigured, fetchProfile]);

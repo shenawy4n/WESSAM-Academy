@@ -64,7 +64,7 @@ export interface GroupAnalyticsRow {
   groupId: string;
   name: string;
   nameArabic: string;
-  academicYear: string;
+  academicYear: string | null;
   isActive: boolean;
   activeStudentsCount: number;
   attendanceRatePct: number | null;
@@ -76,7 +76,7 @@ export interface CourseAnalyticsRow {
   courseId: string;
   title: string;
   titleArabic: string;
-  level: string;
+  level: string | null;
   isPublished: boolean;
   publishedLessonsCount: number;
   enrolledStudentsCount: number;
@@ -270,7 +270,7 @@ export function mapAnalyticsDashboard(raw: any): AnalyticsDashboardData {
           groupId: g.group_id,
           name: g.name,
           nameArabic: g.name_arabic || g.name,
-          academicYear: g.academic_year || '2026/2027',
+          academicYear: g.academic_year || null,
           isActive: Boolean(g.is_active),
           activeStudentsCount: Number(g.active_students_count ?? 0),
           attendanceRatePct: toNumOrNull(g.attendance_rate_pct),
@@ -283,7 +283,7 @@ export function mapAnalyticsDashboard(raw: any): AnalyticsDashboardData {
           courseId: c.course_id,
           title: c.title,
           titleArabic: c.title_arabic || c.title,
-          level: c.level || 'beginner',
+          level: c.level || null,
           isPublished: Boolean(c.is_published),
           publishedLessonsCount: Number(c.published_lessons_count ?? 0),
           enrolledStudentsCount: Number(c.enrolled_students_count ?? 0),

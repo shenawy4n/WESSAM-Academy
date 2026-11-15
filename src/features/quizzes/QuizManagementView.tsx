@@ -8,22 +8,16 @@ import {
   FileQuestion,
   Plus,
   Search,
-  Filter,
   CheckCircle2,
   Clock,
   Award,
-  Layers,
   Edit2,
   Trash2,
   Users,
   Archive,
   BookOpen,
-  Calendar,
-  AlertCircle,
-  Eye,
-  Check,
 } from 'lucide-react';
-import { Card, CardHeader, CardContent } from '../../components/ui/Card';
+import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';

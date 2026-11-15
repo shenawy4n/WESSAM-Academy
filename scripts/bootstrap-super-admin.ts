@@ -71,7 +71,6 @@ function promptHidden(query: string): Promise<string> {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function findAuthUserByEmail(supabase: any, email: string): Promise<User | null> {
   const normalizedEmail = email.trim().toLowerCase();
   let page = 1;

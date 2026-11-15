@@ -15,7 +15,7 @@ import {
   formatRecordTimestampRiyadh,
   paginateArray,
 } from './academicRecordsService';
-import { Card, CardContent, CardHeader } from '../../components/ui/Card';
+import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Modal } from '../../components/ui/Modal';
@@ -239,7 +239,13 @@ export const AcademicRecordDetailPanel: React.FC<AcademicRecordDetailPanelProps>
                 <span>
                   {record.groups.length > 0
                     ? record.groups
-                        .map((g) => `${isRtl ? g.nameArabic : g.name} (${g.academicYear})`)
+                        .map((g) =>
+                          g.academicYear
+                            ? `${isRtl ? g.nameArabic : g.name} (${g.academicYear})`
+                            : isRtl
+                            ? g.nameArabic
+                            : g.name
+                        )
                         .join(' , ')
                     : isRtl
                     ? 'غير مسجل في مجموعة'
@@ -282,9 +288,13 @@ export const AcademicRecordDetailPanel: React.FC<AcademicRecordDetailPanelProps>
             {pctDisplay(record.summary.overallAcademicAveragePct)}
           </div>
           <div className="text-[11px] text-slate-500 mt-1 tabular-nums">
-            {isRtl
-              ? `حد النجاح الافتراضي: ${record.summary.passingThreshold}%`
-              : `Default pass: ${record.summary.passingThreshold}%`}
+            {record.summary.passingThreshold !== null
+              ? isRtl
+                ? `حد النجاح الافتراضي: ${record.summary.passingThreshold}%`
+                : `Default pass: ${record.summary.passingThreshold}%`
+              : isRtl
+              ? 'مبني على النتائج المعتمدة'
+              : 'Based on released grades'}
           </div>
         </div>
 
@@ -688,7 +698,9 @@ export const AcademicRecordDetailPanel: React.FC<AcademicRecordDetailPanelProps>
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-3 tabular-nums text-slate-600">{q.passingScore}%</td>
+                        <td className="py-3 px-3 tabular-nums text-slate-600">
+                          {q.passingScore !== null ? `${q.passingScore}%` : '—'}
+                        </td>
                         <td className="py-3 px-3">
                           {q.isResultReleased && q.isPassed !== null ? (
                             q.isPassed ? (
@@ -771,7 +783,7 @@ export const AcademicRecordDetailPanel: React.FC<AcademicRecordDetailPanelProps>
                         <td className="py-3 px-3 tabular-nums whitespace-nowrap">
                           {a.score !== null ? (
                             <span className="font-bold text-[#14243A]">
-                              {a.score} / {a.maxScore}{' '}
+                              {a.maxScore !== null ? `${a.score} / ${a.maxScore}` : a.score}{' '}
                               {a.percentageScore !== null && (
                                 <span className="text-slate-500 font-normal">({a.percentageScore}%)</span>
                               )}

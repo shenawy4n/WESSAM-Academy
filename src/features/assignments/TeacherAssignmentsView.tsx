@@ -8,21 +8,16 @@ import {
   FileText,
   Plus,
   Search,
-  Filter,
   Calendar,
-  Clock,
   CheckSquare,
   Users,
   Copy,
   Edit,
-  Trash2,
   Archive,
   AlertCircle,
-  BarChart3,
-  CheckCircle2,
   BookOpen,
 } from 'lucide-react';
-import { AssignmentRecord, AssignmentStatus } from './types';
+import { AssignmentRecord } from './types';
 import {
   fetchTeacherAssignments,
   duplicateAssignment,
@@ -40,7 +35,7 @@ interface TeacherAssignmentsViewProps {
 }
 
 export const TeacherAssignmentsView: React.FC<TeacherAssignmentsViewProps> = ({
-  initialTab = 'all',
+  initialTab: _initialTab = 'all',
 }) => {
   const [assignments, setAssignments] = useState<AssignmentRecord[]>([]);
   const [courses, setCourses] = useState<any[]>([]);

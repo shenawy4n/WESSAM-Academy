@@ -10,7 +10,6 @@ import { parseVideoUrl } from '../courses/videoUtils';
 import {
   formatDuration,
   calculateProgressPercentage,
-  isCompletionEligible,
   getResourceTypeLabel,
 } from './videoLibraryUtils';
 import {
@@ -19,6 +18,7 @@ import {
   getSecureResourceUrl,
 } from './videoLibraryService';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { openSafeExternalUrl } from '../../lib/safeDownload';
 import {
   X,
   Play,
@@ -33,7 +33,6 @@ import {
   ShieldCheck,
   VideoOff,
   Sparkles,
-  ArrowRight,
 } from 'lucide-react';
 
 interface VideoPlayerModalProps {
@@ -53,7 +52,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   onProgressUpdated,
   isStudent = false,
 }) => {
-  const { t, isRtl } = useLocale();
+  const { isRtl } = useLocale();
 
   const [currentTime, setCurrentTime] = useState<number>(
     video.progress?.lastPositionSeconds || 0
@@ -70,7 +69,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [modalError, setModalError] = useState<unknown>(null);
 
   const parsed = parseVideoUrl(video.videoUrl);
-  const lastSyncRef = useRef<number>(Date.now());
+  const lastSyncRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load lesson resources if video is attached to a lesson
@@ -153,7 +152,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       setDownloadingId(res.id);
       setModalError(null);
       const url = await getSecureResourceUrl(res.id);
-      window.open(url, '_blank', 'noopener,noreferrer');
+      openSafeExternalUrl(url);
     } catch (err: unknown) {
       setModalError(err);
     } finally {
@@ -164,7 +163,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   if (!isOpen) return null;
 
   const progressPct = calculateProgressPercentage(currentTime, duration);
-  const eligibleForCompletion = isCompletionEligible(currentTime, duration);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">

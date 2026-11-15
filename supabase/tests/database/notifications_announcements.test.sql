@@ -15,7 +15,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(55);
+SELECT extensions.plan(57);
 
 -- -----------------------------------------------------------------------------
 -- 1. Deterministic isolated identities
@@ -518,6 +518,41 @@ SELECT extensions.results_eq(
   $$ SELECT count(*)::int FROM public.notifications $$,
   ARRAY[0],
   'Inactive student cannot select any notifications'
+);
+
+-- 4. Student cannot call process_scheduled_announcements() directly
+SET LOCAL "request.jwt.claim.sub" = '22222222-4444-4222-8222-222222222222';
+SELECT extensions.throws_ok(
+  $$ SELECT public.process_scheduled_announcements() $$,
+  '42501',
+  NULL,
+  'Students are forbidden from invoking process_scheduled_announcements directly'
+);
+
+-- 5. Student polling get_unread_notifications_count safely processes due scheduled announcements without 42501
+RESET ROLE;
+INSERT INTO public.announcements (
+  id, teacher_id, title, title_arabic, body, body_arabic,
+  target_audience, group_id, priority, status, scheduled_for
+) VALUES (
+  'eeeeeeee-4444-4888-8888-888888888888',
+  '11111111-4444-4111-8111-111111111111',
+  'Student Poll Scheduled Announcement',
+  'إعلان مجدول أثناء فحص الطالب',
+  'Body',
+  'نص',
+  'group',
+  'cccccccc-4444-4111-8111-111111111111',
+  'normal',
+  'scheduled',
+  now() - interval '2 minutes'
+) ON CONFLICT (id) DO NOTHING;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '22222222-4444-4222-8222-222222222222';
+SELECT extensions.lives_ok(
+  $$ SELECT public.get_unread_notifications_count() $$,
+  'Student polling get_unread_notifications_count safely publishes due scheduled announcements internally'
 );
 
 -- 4. Student 1 marks single notification as read

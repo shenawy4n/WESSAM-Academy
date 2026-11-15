@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocale } from '../../hooks/useLocale';
-import { VideoAssetRecord, VideoSource, VideoStatus } from './types';
+import { VideoAssetRecord, VideoStatus } from './types';
 import { validateVideoInputs, detectVideoProvider, formatDuration } from './videoLibraryUtils';
 import { parseVideoUrl } from '../courses/videoUtils';
 import { createVideoAsset, updateVideoAsset } from './videoLibraryService';
@@ -13,13 +13,11 @@ import { SafeVideoPlayer } from '../courses/SafeVideoPlayer';
 import {
   X,
   Video,
-  Play,
   Save,
   ShieldCheck,
   Eye,
   AlertCircle,
   Clock,
-  Layers,
   BookOpen,
   Users,
 } from 'lucide-react';
@@ -47,7 +45,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({
   groups = [],
   onSaved,
 }) => {
-  const { t, isRtl } = useLocale();
+  const { isRtl } = useLocale();
 
   const [title, setTitle] = useState('');
   const [titleArabic, setTitleArabic] = useState('');

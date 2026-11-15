@@ -341,7 +341,9 @@ export function toServiceError(err: unknown, context: ServiceErrorContext): Serv
 }
 
 export function throwServiceError(err: unknown, context: ServiceErrorContext): never {
-  throw toServiceError(err, context);
+  const serviceErr = toServiceError(err, context);
+  logServiceError(serviceErr);
+  throw serviceErr;
 }
 
 export function requireSupabaseClient(

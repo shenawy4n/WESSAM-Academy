@@ -14,14 +14,10 @@ import {
   User,
   CheckCircle2,
   RotateCcw,
-  Eye,
-  EyeOff,
   History,
   Lock,
   MessageSquare,
   Award,
-  ChevronRight,
-  ExternalLink,
 } from 'lucide-react';
 import {
   AssignmentRecord,
@@ -40,6 +36,7 @@ import {
   fetchGradingHistory,
   getAssignmentFileSignedUrl,
 } from './assignmentService';
+import { openSafeExternalUrl } from '../../lib/safeDownload';
 
 interface GradingWorkspaceModalProps {
   isOpen: boolean;
@@ -148,7 +145,7 @@ export const GradingWorkspaceModal: React.FC<GradingWorkspaceModalProps> = ({
   const handleDownloadFile = async (filePath: string) => {
     try {
       const signedUrl = await getAssignmentFileSignedUrl(filePath);
-      window.open(signedUrl, '_blank');
+      openSafeExternalUrl(signedUrl);
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'فشل تحميل الملف' });
     }

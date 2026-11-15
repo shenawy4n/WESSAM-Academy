@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Clock,
   AlertTriangle,
@@ -13,7 +13,6 @@ import {
   Send,
   Save,
   AlertCircle,
-  HelpCircle,
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
@@ -51,29 +50,22 @@ export const QuizRunnerModal: React.FC<QuizRunnerModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
-  // Timer interval
+  const selectedAnswersRef = useRef(selectedAnswers);
+  const isSubmittingRef = useRef(isSubmitting);
+
   useEffect(() => {
-    if (!isOpen) return;
+    selectedAnswersRef.current = selectedAnswers;
+  }, [selectedAnswers]);
 
-    const interval = setInterval(() => {
-      const sec = calculateRemainingSeconds(expiresAt);
-      setRemainingSeconds(sec);
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
 
-      if (sec <= 0) {
-        clearInterval(interval);
-        // Time expired! Auto-submit
-        handleAutoSubmitOnExpiry();
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isOpen, expiresAt]);
-
-  const handleAutoSubmitOnExpiry = async () => {
-    if (isSubmitting) return;
+  const handleAutoSubmitOnExpiry = useCallback(async () => {
+    if (isSubmittingRef.current) return;
     try {
       setIsSubmitting(true);
-      const answersPayload = Object.entries(selectedAnswers).map(([qId, val]) => ({
+      const answersPayload = Object.entries(selectedAnswersRef.current).map(([qId, val]) => ({
         questionId: qId,
         selectedOptionId: val.optionId || null,
         answerText: val.text || null,
@@ -85,7 +77,25 @@ export const QuizRunnerModal: React.FC<QuizRunnerModalProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [attemptId, onSubmitted]);
+
+  // Timer interval
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const interval = setInterval(() => {
+      const sec = calculateRemainingSeconds(expiresAt);
+      setRemainingSeconds(sec);
+
+      if (sec <= 0) {
+        clearInterval(interval);
+        // Time expired! Auto-submit
+        void handleAutoSubmitOnExpiry();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, expiresAt, handleAutoSubmitOnExpiry]);
 
   // Autosave when answer changes (debounced)
   const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);

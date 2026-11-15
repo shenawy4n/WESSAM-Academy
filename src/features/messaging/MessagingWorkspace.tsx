@@ -62,6 +62,107 @@ interface MessagingWorkspaceProps {
 const ACCEPTED_FILE_INPUT =
   '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.jpg,.jpeg,.png,.webp,.mp3,.wav,.m4a,.txt';
 
+interface MessagingErrorAlertProps {
+  err: unknown;
+  mode: 'student' | 'teacher';
+  isRtl: boolean;
+  variant?: 'card' | 'banner';
+  onRetry?: () => void;
+  onDismiss?: () => void;
+}
+
+const MessagingErrorAlert: React.FC<MessagingErrorAlertProps> = ({
+  err,
+  mode,
+  isRtl,
+  variant,
+  onRetry,
+  onDismiss,
+}) => {
+  if (!isMissingSchemaFeatureError(err)) {
+    return (
+      <ErrorState
+        variant={variant}
+        error={err}
+        isRtl={isRtl}
+        onRetry={onRetry}
+        onDismiss={onDismiss}
+      />
+    );
+  }
+
+  const title = isRtl
+    ? 'خدمة الرسائل غير متاحة مؤقتاً'
+    : 'Messaging Service Temporarily Unavailable';
+  const message =
+    mode === 'student'
+      ? isRtl
+        ? 'يحتاج قسم الرسائل إلى إكمال التحديث البرمجي لقاعدة البيانات على الخادم قبل فتح المحادثات. يرجى إعادة المحاولة لاحقاً أو إبلاغ إدارة الأكاديمية.'
+        : 'Direct messaging is waiting for the latest server database update to be applied. Please try again later or notify academy support.'
+      : isRtl
+      ? 'يتطلب نظام رسائل الطلاب تطبيق آخر تحديث لبنية قاعدة البيانات وتخزين المرفقات على الخادم.'
+      : 'Student messaging requires the latest messaging database and storage migration to be applied on the server.';
+
+  if (variant === 'banner') {
+    return (
+      <div
+        role="alert"
+        className="flex items-start justify-between gap-3 p-3.5 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-900"
+      >
+        <div className="min-w-0">
+          <h4 className="text-xs font-bold">{title}</h4>
+          <p className="text-xs mt-0.5 leading-relaxed text-amber-800">{message}</p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              icon={<RefreshCw className="w-3.5 h-3.5" />}
+            >
+              {isRtl ? 'إعادة المحاولة' : 'Retry'}
+            </Button>
+          )}
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              aria-label={isRtl ? 'إغلاق' : 'Dismiss'}
+              className="p-1.5 text-amber-600 hover:text-amber-900 rounded-lg hover:bg-white/70 transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center text-center p-6 sm:p-8 rounded-xl border border-amber-200 bg-amber-50/70"
+    >
+      <div className="w-11 h-11 rounded-xl border border-amber-200 bg-amber-100 text-amber-700 flex items-center justify-center mb-3">
+        <MessageSquare className="w-5 h-5" />
+      </div>
+      <h4 className="text-sm font-bold text-amber-950">{title}</h4>
+      <p className="text-xs text-amber-800 max-w-md mt-1.5 mb-4 leading-relaxed">{message}</p>
+      {onRetry && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          icon={<RefreshCw className="w-3.5 h-3.5" />}
+        >
+          {isRtl ? 'إعادة المحاولة' : 'Retry'}
+        </Button>
+      )}
+    </div>
+  );
+};
+
 export const MessagingWorkspace: React.FC<MessagingWorkspaceProps> = ({
   mode,
   initialConversationId,
@@ -118,11 +219,20 @@ export const MessagingWorkspace: React.FC<MessagingWorkspaceProps> = ({
     generation: 0,
   });
   const selectedConversationRef = useRef<string | null>(selectedConversationId);
-  selectedConversationRef.current = selectedConversationId;
   const initialConversationIdRef = useRef<string | null | undefined>(initialConversationId);
-  initialConversationIdRef.current = initialConversationId;
   const pendingAttachmentsRef = useRef<PendingAttachmentItem[]>([]);
-  pendingAttachmentsRef.current = pendingAttachments;
+
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    initialConversationIdRef.current = initialConversationId;
+  }, [initialConversationId]);
+
+  useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -608,98 +718,6 @@ export const MessagingWorkspace: React.FC<MessagingWorkspaceProps> = ({
     }
   };
 
-  const renderMessagingError = (
-    err: unknown,
-    options?: {
-      variant?: 'card' | 'banner';
-      onRetry?: () => void;
-      onDismiss?: () => void;
-    }
-  ) => {
-    if (!isMissingSchemaFeatureError(err)) {
-      return (
-        <ErrorState
-          variant={options?.variant}
-          error={err}
-          isRtl={isRtl}
-          onRetry={options?.onRetry}
-          onDismiss={options?.onDismiss}
-        />
-      );
-    }
-
-    const title = isRtl
-      ? 'خدمة الرسائل غير متاحة مؤقتاً'
-      : 'Messaging Service Temporarily Unavailable';
-    const message =
-      mode === 'student'
-        ? isRtl
-          ? 'يحتاج قسم الرسائل إلى إكمال التحديث البرمجي لقاعدة البيانات على الخادم قبل فتح المحادثات. يرجى إعادة المحاولة لاحقاً أو إبلاغ إدارة الأكاديمية.'
-          : 'Direct messaging is waiting for the latest server database update to be applied. Please try again later or notify academy support.'
-        : isRtl
-        ? 'يتطلب نظام رسائل الطلاب تطبيق آخر تحديث لبنية قاعدة البيانات وتخزين المرفقات على الخادم.'
-        : 'Student messaging requires the latest messaging database and storage migration to be applied on the server.';
-
-    if (options?.variant === 'banner') {
-      return (
-        <div
-          role="alert"
-          className="flex items-start justify-between gap-3 p-3.5 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-900"
-        >
-          <div className="min-w-0">
-            <h4 className="text-xs font-bold">{title}</h4>
-            <p className="text-xs mt-0.5 leading-relaxed text-amber-800">{message}</p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {options.onRetry && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={options.onRetry}
-                icon={<RefreshCw className="w-3.5 h-3.5" />}
-              >
-                {isRtl ? 'إعادة المحاولة' : 'Retry'}
-              </Button>
-            )}
-            {options.onDismiss && (
-              <button
-                type="button"
-                onClick={options.onDismiss}
-                aria-label={isRtl ? 'إغلاق' : 'Dismiss'}
-                className="p-1.5 text-amber-600 hover:text-amber-900 rounded-lg hover:bg-white/70 transition-colors cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div
-        role="alert"
-        className="flex flex-col items-center justify-center text-center p-6 sm:p-8 rounded-xl border border-amber-200 bg-amber-50/70"
-      >
-        <div className="w-11 h-11 rounded-xl border border-amber-200 bg-amber-100 text-amber-700 flex items-center justify-center mb-3">
-          <MessageSquare className="w-5 h-5" />
-        </div>
-        <h4 className="text-sm font-bold text-amber-950">{title}</h4>
-        <p className="text-xs text-amber-800 max-w-md mt-1.5 mb-4 leading-relaxed">{message}</p>
-        {options?.onRetry && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={options.onRetry}
-            icon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            {isRtl ? 'إعادة المحاولة' : 'Retry'}
-          </Button>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-4 max-w-7xl mx-auto" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header Banner */}
@@ -808,11 +826,15 @@ export const MessagingWorkspace: React.FC<MessagingWorkspaceProps> = ({
         />
       )}
 
-      {Boolean(actionError) &&
-        renderMessagingError(actionError, {
-          variant: 'banner',
-          onDismiss: () => setActionError(null),
-        })}
+      {Boolean(actionError) && (
+        <MessagingErrorAlert
+          err={actionError}
+          mode={mode}
+          isRtl={isRtl}
+          variant="banner"
+          onDismiss={() => setActionError(null)}
+        />
+      )}
 
       {/* Main Split Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-[580px]">
@@ -885,10 +907,13 @@ export const MessagingWorkspace: React.FC<MessagingWorkspaceProps> = ({
               </div>
             ) : listError ? (
               <div className="p-4">
-                {renderMessagingError(listError, {
-                  variant: 'card',
-                  onRetry: () => loadInboxData(true),
-                })}
+                <MessagingErrorAlert
+                  err={listError}
+                  mode={mode}
+                  isRtl={isRtl}
+                  variant="card"
+                  onRetry={() => loadInboxData(true)}
+                />
               </div>
             ) : filteredConversations.length === 0 ? (
               <div className="p-6 text-center space-y-2">
@@ -1070,10 +1095,13 @@ export const MessagingWorkspace: React.FC<MessagingWorkspaceProps> = ({
                     </span>
                   </div>
                 ) : messagesError ? (
-                  renderMessagingError(messagesError, {
-                    variant: 'card',
-                    onRetry: () => loadConversationMessages(selectedConversation.id, true),
-                  })
+                  <MessagingErrorAlert
+                    err={messagesError}
+                    mode={mode}
+                    isRtl={isRtl}
+                    variant="card"
+                    onRetry={() => loadConversationMessages(selectedConversation.id, true)}
+                  />
                 ) : messages.length === 0 ? (
                   <div className="py-12 text-center space-y-2">
                     <p className="text-xs font-bold text-[#14243A]">

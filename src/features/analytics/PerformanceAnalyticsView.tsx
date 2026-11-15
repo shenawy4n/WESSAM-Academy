@@ -28,9 +28,7 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import {
   AlertTriangle,
   Award,
-  BarChart3,
   BookOpen,
-  Calendar,
   CheckCircle2,
   FolderGit2,
   Info,
@@ -633,7 +631,7 @@ export const PerformanceAnalyticsView: React.FC<PerformanceAnalyticsViewProps> =
                         <td className="py-3 px-4 font-semibold text-[#14243A]">
                           {isRtl ? g.nameArabic : g.name}
                         </td>
-                        <td className="py-3 px-4 tabular-nums text-slate-600">{g.academicYear}</td>
+                        <td className="py-3 px-4 tabular-nums text-slate-600">{g.academicYear || '—'}</td>
                         <td className="py-3 px-4 tabular-nums">{g.activeStudentsCount}</td>
                         <td className="py-3 px-4 tabular-nums font-semibold">
                           {g.attendanceRatePct !== null ? `${g.attendanceRatePct}%` : '—'}

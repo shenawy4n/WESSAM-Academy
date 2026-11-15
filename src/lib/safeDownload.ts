@@ -70,8 +70,15 @@ export function sanitizeDownloadFileName(
 ): string | undefined {
   if (!title || typeof title !== 'string') return undefined;
 
-  const cleaned = title
-    .replace(/[\u0000-\u001f\u007f<>:"/\\|?*]+/g, ' ')
+  const withoutControlChars = Array.from(title)
+    .map((ch) => {
+      const code = ch.charCodeAt(0);
+      return code < 32 || code === 127 ? ' ' : ch;
+    })
+    .join('');
+
+  const cleaned = withoutControlChars
+    .replace(/[<>:"/\\|?*]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -114,6 +121,32 @@ export function triggerSafeResourceDownload(
   if (suggestedName) {
     link.download = suggestedName;
   }
+
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+  }
+
+  return safeUrl;
+}
+
+/**
+ * Opens an external URL or signed resource link in a new tab using a temporary
+ * anchor element instead of window.open(), avoiding sandboxed iframe popup blocks.
+ */
+export function openSafeExternalUrl(url: string): string {
+  const safeUrl = validateDownloadUrl(url);
+
+  if (typeof document === 'undefined') {
+    return safeUrl;
+  }
+
+  const link = document.createElement('a');
+  link.href = safeUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
 
   document.body.appendChild(link);
   try {

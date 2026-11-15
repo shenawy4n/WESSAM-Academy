@@ -3,15 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   HelpCircle,
   Plus,
   Trash2,
-  CheckCircle2,
   AlertCircle,
-  GripVertical,
-  Edit2,
   Save,
   BookOpen,
   Library,
@@ -62,7 +59,7 @@ export const QuizQuestionBuilderModal: React.FC<QuizQuestionBuilderModalProps> =
   ]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
-  const loadQuestions = async () => {
+  const loadQuestions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -76,16 +73,9 @@ export const QuizQuestionBuilderModal: React.FC<QuizQuestionBuilderModalProps> =
     } finally {
       setLoading(false);
     }
-  };
+  }, [quizId]);
 
-  useEffect(() => {
-    if (isOpen) {
-      loadQuestions();
-      resetForm();
-    }
-  }, [isOpen, quizId]);
-
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setEditingQuestionId(null);
     setQuestionText('');
     setQuestionTextArabic('');
@@ -100,7 +90,14 @@ export const QuizQuestionBuilderModal: React.FC<QuizQuestionBuilderModalProps> =
       { optionText: '', optionTextArabic: '', isCorrect: false, orderIndex: 2 },
       { optionText: '', optionTextArabic: '', isCorrect: false, orderIndex: 3 },
     ]);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadQuestions();
+      resetForm();
+    }
+  }, [isOpen, loadQuestions, resetForm]);
 
   const handleEditQuestion = (q: QuestionItem) => {
     setEditingQuestionId(q.id);

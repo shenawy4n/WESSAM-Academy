@@ -77,7 +77,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
 
-      - name: Verify concurrent enrollment cannot exceed group capacity
+      - name: Verify concurrent enrollment and super-admin governance locks
         shell: bash
         run: |
           set -euo pipefail
@@ -87,6 +87,7 @@ jobs:
             exit 1
           fi
           DB_URL="$DB_URL" bash supabase/tests/database/group_management_concurrency.sh
+          DB_URL="$DB_URL" bash supabase/tests/database/super_admin_concurrency.sh
 
       - name: Stop disposable Supabase stack
         if: always()

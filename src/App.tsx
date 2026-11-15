@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { LocaleProvider, useLocale } from './hooks/useLocale';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { isSupabaseConfigured } from './lib/supabase/client';
@@ -35,10 +35,9 @@ import { AcademicRecordsView } from './features/academicRecords/AcademicRecordsV
 import { StudentResultsView } from './features/academicRecords/StudentResultsView';
 import { PerformanceAnalyticsView } from './features/analytics/PerformanceAnalyticsView';
 import { SystemSettingsView } from './features/settings/SystemSettingsView';
-import { FeaturePlaceholderView } from './components/shared/FeaturePlaceholderView';
+import { StudentProfileView } from './features/auth/StudentProfileView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
-import { User } from 'lucide-react';
 
 function AppContent() {
   const { t, isRtl } = useLocale();
@@ -335,20 +334,7 @@ function AppContent() {
           return <NotificationCenterView onNavigateToResource={handleStudentNavigateToResource} />;
 
         case 'profile':
-          return (
-            <FeaturePlaceholderView
-              title={t.navigation.myProfile}
-              subtitle={isRtl ? 'الملف الشخصي والبيانات الأكاديمية' : 'Student academic profile'}
-              targetPhase="Phase 2 — Identity & Student Management"
-              icon={User}
-              description={isRtl ? 'بياناتك الأكاديمية المسجلة، اسم المستخدم، ورقم المجموعة.' : 'Your registered student ID, username, cohort details, and academic contacts.'}
-              plannedCapabilities={[
-                isRtl ? 'عرض الرقم الأكاديمي والمجموعة' : 'View student ID and academic cohort',
-                isRtl ? 'تحديث بيانات الاتصال المصرح بها' : 'Update permitted contact details',
-                isRtl ? 'تغيير كلمة المرور بشكل آمن' : 'Secure password update through Edge Function',
-              ]}
-            />
-          );
+          return <StudentProfileView />;
 
         default:
           return <StudentDashboard onNavigate={(v) => setCurrentStudentView(v as StudentView)} />;

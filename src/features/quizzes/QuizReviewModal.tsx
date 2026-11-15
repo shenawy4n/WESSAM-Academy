@@ -5,11 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Award,
   CheckCircle2,
   XCircle,
-  HelpCircle,
-  Clock,
   MessageSquare,
   Lock,
   AlertCircle,

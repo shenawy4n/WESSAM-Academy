@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   FileCode,
-  FileText,
 } from 'lucide-react';
 import {
   parseAndValidateCsv,

@@ -28,6 +28,11 @@ test('dateUtils - Conversion of UTC ISO to Riyadh input components', () => {
   const parts = utcToRiyadhInputs('2026-11-08T17:30:00.000Z');
   assert.equal(parts.date, '2026-11-08');
   assert.equal(parts.time, '20:30');
+
+  // 21:00 UTC corresponds to 00:00 next day in Riyadh (never 24:00)
+  const midnightParts = utcToRiyadhInputs('2026-11-10T21:00:00.000Z');
+  assert.equal(midnightParts.date, '2026-11-11');
+  assert.equal(midnightParts.time, '00:00');
 });
 
 test('dateUtils - Localized Formatting in Asia/Riyadh', () => {

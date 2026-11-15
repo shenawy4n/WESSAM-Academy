@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocale } from '../../hooks/useLocale';
-import { VideoAssetRecord, VideoFilter, VideoStatus, VideoSource } from './types';
+import { VideoAssetRecord, VideoStatus, VideoSource } from './types';
 import {
   fetchTeacherVideos,
   publishVideo,
@@ -24,7 +24,6 @@ import {
   Video,
   Plus,
   Search,
-  Filter,
   Play,
   BarChart3,
   Edit2,
@@ -37,15 +36,11 @@ import {
   ShieldCheck,
   ChevronUp,
   ChevronDown,
-  Layers,
-  Sparkles,
   Paperclip,
-  CheckCircle2,
-  FolderGit2,
 } from 'lucide-react';
 
 export const TeacherVideoLibraryView: React.FC = () => {
-  const { t, isRtl } = useLocale();
+  const { isRtl } = useLocale();
 
   const [videos, setVideos] = useState<VideoAssetRecord[]>([]);
   const [courses, setCourses] = useState<{ id: string; name: string; nameArabic?: string }[]>([]);

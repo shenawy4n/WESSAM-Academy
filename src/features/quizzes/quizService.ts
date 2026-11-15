@@ -7,7 +7,6 @@ import {
   requireSupabaseClient,
   requireAuthenticatedUser,
   throwServiceError,
-  ServiceError,
 } from '../../lib/errors/serviceError';
 import {
   QuizRecord,

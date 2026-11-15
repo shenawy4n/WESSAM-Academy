@@ -197,7 +197,7 @@ export async function fetchTeacherAssignments(filter?: {
   }
 
   let data: any[] | null = null;
-  let error: unknown = null;
+  let error: unknown;
   try {
     const res = await query;
     data = res.data;
@@ -277,7 +277,7 @@ export async function fetchStudentAssignments(): Promise<{
 
   // 1. Fetch accessible assignments
   let assignData: any[] | null = null;
-  let assignError: unknown = null;
+  let assignError: unknown;
   try {
     const res = await client
       .from('assignments')
@@ -332,7 +332,7 @@ export async function fetchStudentAssignments(): Promise<{
 
   // 2. Fetch student's own submissions
   let subData: any[] | null = null;
-  let subError: unknown = null;
+  let subError: unknown;
   try {
     const res = await client
       .from('submissions')
@@ -393,7 +393,7 @@ export async function fetchAssignmentDetails(assignmentId: string): Promise<Assi
   });
 
   let data: any = null;
-  let error: unknown = null;
+  let error: unknown;
   try {
     const res = await client
       .from('assignments')
@@ -607,7 +607,7 @@ export async function deleteOrArchiveAssignment(
   });
 
   if (archiveOnly) {
-    let error: unknown = null;
+    let error: unknown;
     try {
       const res = await client
         .from('assignments')
@@ -841,7 +841,7 @@ export async function fetchGradingHistory(
   });
 
   let data: any[] | null = null;
-  let error: unknown = null;
+  let error: unknown;
   try {
     const res = await client
       .from('assignment_grading_history')

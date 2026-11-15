@@ -871,3 +871,65 @@ test('buildDirectStudentAcademicRecord hides unreleased assignment & quiz grades
   assert.equal(record.summary.overallAcademicAveragePct, null);
   assert.equal(record.summary.attendanceRatePct, null);
 });
+
+test('mapRawAcademicRecord and buildDirectStudentAcademicRecord return null for omitted metadata instead of fabricating defaults', () => {
+  const mapped = mapRawAcademicRecord({
+    student: { id: 'st-omit' },
+    groups: [{ id: 'g-1', name: 'Cohort', is_active: true }],
+    courses: [{ course_id: 'c-1', title: 'Course', is_published: true }],
+    quizzes: [{ id: 'qa-1', quiz_id: 'q-1', title: 'Quiz', status: 'submitted', started_at: '2026-11-10T10:00:00Z' }],
+    assignments: [{ id: 'sub-1', assignment_id: 'a-1', title: 'Assign', is_late: false, is_grade_released: false }],
+    summary: {},
+  });
+
+  assert.equal(mapped.student.enrolledAt, null);
+  assert.equal(mapped.student.status, null);
+  assert.equal(mapped.groups[0].academicYear, null);
+  assert.equal(mapped.courses[0].level, null);
+  assert.equal(mapped.quizzes[0].passingScore, null);
+  assert.equal(mapped.assignments[0].maxScore, null);
+  assert.equal(mapped.summary.passingThreshold, null);
+
+  const direct = buildDirectStudentAcademicRecord({
+    callerRole: 'teacher',
+    callerId: 't-1',
+    studentProfile: { id: 'st-omit', full_name: 'Omar' },
+    academicProfile: null,
+    membershipRows: [{ group_id: 'g-1', groups: { id: 'g-1', name: 'Cohort', is_active: true } }],
+    groupCoursesRows: [
+      {
+        course_id: 'c-1',
+        group_id: 'g-1',
+        courses: { id: 'c-1', title: 'Course', is_published: true, teacher_id: 't-1' },
+        groups: { id: 'g-1', name: 'Cohort' },
+      },
+    ],
+    lessonRows: [],
+    lessonProgressRows: [],
+    quizAttemptRows: [
+      {
+        id: 'qa-direct',
+        quiz_id: 'q-1',
+        status: 'submitted',
+        started_at: '2026-11-10T10:00:00Z',
+        quizzes: { id: 'q-1', title: 'Quiz', teacher_id: 't-1' },
+      },
+    ],
+    submissionRows: [
+      {
+        id: 'sub-direct',
+        assignment_id: 'a-1',
+        assignments: { id: 'a-1', title: 'Assign', teacher_id: 't-1' },
+      },
+    ],
+    attendanceRows: [],
+  });
+
+  assert.equal(direct.student.enrolledAt, null);
+  assert.equal(direct.student.status, null);
+  assert.equal(direct.groups[0].academicYear, null);
+  assert.equal(direct.courses[0].level, null);
+  assert.equal(direct.quizzes[0].passingScore, null);
+  assert.equal(direct.assignments[0].maxScore, null);
+  assert.equal(direct.summary.passingThreshold, null);
+});

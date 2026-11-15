@@ -82,3 +82,17 @@ test('mapAnalyticsDashboard distinguishes NULL unavailable metrics from numeric 
   assert.equal(mapped.scope.attentionScoreThreshold, 65);
   assert.equal(mapped.scope.attentionAttendanceThreshold, 80);
 });
+
+test('mapAnalyticsDashboard returns null when group academic_year or course level is missing', () => {
+  const mapped = mapAnalyticsDashboard({
+    scope: {},
+    kpis: {},
+    student_analytics: {},
+    group_analytics: [{ group_id: 'g-1', name: 'Cohort A', is_active: true }],
+    course_analytics: [{ course_id: 'c-1', title: 'Grammar', is_published: true }],
+    attendance_analytics: {},
+  });
+
+  assert.equal(mapped.groupAnalytics[0].academicYear, null);
+  assert.equal(mapped.courseAnalytics[0].level, null);
+});

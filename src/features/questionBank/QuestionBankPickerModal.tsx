@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Search,
-  Filter,
   CheckSquare,
   Square,
-  HelpCircle,
   Plus,
   Layers,
 } from 'lucide-react';

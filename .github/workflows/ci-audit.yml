@@ -39,8 +39,14 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: TypeScript validation
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: ESLint verification
         run: npm run lint
+
+      - name: Unit tests
+        run: npm test
 
       - name: Production build
         run: npm run build
@@ -65,7 +71,23 @@ jobs:
             20261104000003_secure_archive_rpc_authorization.sql \
             20261104000004_minimize_archive_authorization_privileges.sql \
             20261104000005_harden_groups_rls_update_protection.sql \
-            20261104000006_courses_curriculum_management.sql
+            20261104000006_courses_curriculum_management.sql \
+            20261107000007_reconcile_courses_rls_recursion.sql \
+            20261107000008_live_sessions_and_attendance.sql \
+            20261108000009_harden_live_sessions_and_attendance_security.sql \
+            20261108000010_quizzes_and_assessments.sql \
+            20261109000011_notifications_and_announcements.sql \
+            20261109000012_video_library_learning_resources.sql \
+            20261110000013_complete_question_bank.sql \
+            20261110000014_remediate_question_bank_rpc_and_rls.sql \
+            20261111000015_complete_assignments_and_homework.sql \
+            20261113000017_student_teacher_messaging.sql \
+            20261114000018_harden_messaging_schema_compatibility.sql \
+            20261114000019_phase6_academic_records.sql \
+            20261114000020_phase6_analytics_rpcs.sql \
+            20261114000021_phase6_system_settings.sql \
+            20261114000022_fix_academic_records_schema_compatibility.sql \
+            20261115000023_harden_governance_and_analytics.sql
           do
             test -f "supabase/migrations/$migration" || {
               echo "::error::Missing migration: $migration"

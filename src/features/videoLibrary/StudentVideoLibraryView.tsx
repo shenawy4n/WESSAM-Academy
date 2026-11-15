@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocale } from '../../hooks/useLocale';
-import { VideoAssetRecord, VideoFilter } from './types';
+import { VideoAssetRecord } from './types';
 import { fetchStudentVideos } from './videoLibraryService';
 import { formatDuration, calculateProgressPercentage } from './videoLibraryUtils';
 import { VideoPlayerModal } from './VideoPlayerModal';
@@ -18,12 +18,8 @@ import {
   Clock,
   BookOpen,
   Search,
-  Filter,
   Sparkles,
-  ArrowRight,
-  ExternalLink,
   ShieldCheck,
-  CheckCircle,
 } from 'lucide-react';
 
 interface StudentVideoLibraryViewProps {
@@ -33,7 +29,7 @@ interface StudentVideoLibraryViewProps {
 export const StudentVideoLibraryView: React.FC<StudentVideoLibraryViewProps> = ({
   onNavigateToLesson,
 }) => {
-  const { t, isRtl } = useLocale();
+  const { isRtl } = useLocale();
 
   const [videos, setVideos] = useState<VideoAssetRecord[]>([]);
   const [courses, setCourses] = useState<{ id: string; title: string; titleArabic: string }[]>([]);

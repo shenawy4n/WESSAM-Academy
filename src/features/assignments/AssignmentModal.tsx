@@ -7,13 +7,11 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Calendar,
-  Clock,
   FileText,
   UploadCloud,
   Trash2,
   Plus,
   AlertCircle,
-  HelpCircle,
   BookOpen,
   Users,
   Award,

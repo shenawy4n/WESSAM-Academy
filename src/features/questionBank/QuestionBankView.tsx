@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search,
-  Filter,
   Plus,
   Copy,
-  Trash2,
   Archive,
   RefreshCw,
   Upload,
@@ -13,15 +11,11 @@ import {
   Edit,
   Tag,
   Clock,
-  CheckCircle,
-  HelpCircle,
   Layers,
-  Sparkles,
   BookOpen,
   ArrowUpDown,
   CheckSquare,
   Square,
-  FolderArchive,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -33,7 +27,6 @@ import {
 } from './types';
 import {
   fetchQuestionBankItems,
-  fetchQuestionBankStats,
   createQuestionBankItem,
   updateQuestionBankItem,
   duplicateQuestionBankItem,
@@ -65,7 +58,6 @@ export const QuestionBankView: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<QuestionType | 'all'>('all');
   const [diffFilter, setDiffFilter] = useState<DifficultyLevel | 'all'>('all');
   const [courseFilter, setCourseFilter] = useState<string | 'all'>('all');
-  const [tagFilter, setTagFilter] = useState('');
   const [lifecycleTab, setLifecycleTab] = useState<'active' | 'archived'>('active');
   const [sortBy, setSortBy] = useState<'created_at' | 'points' | 'difficulty' | 'question_text'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -129,10 +121,10 @@ export const QuestionBankView: React.FC = () => {
       diffFilter,
       courseFilter,
       lifecycleTab,
-      tagFilter
+      ''
     );
     return sortQuestions(filtered, sortBy, sortOrder);
-  }, [items, searchQuery, typeFilter, diffFilter, courseFilter, lifecycleTab, tagFilter, sortBy, sortOrder]);
+  }, [items, searchQuery, typeFilter, diffFilter, courseFilter, lifecycleTab, sortBy, sortOrder]);
 
   // Paginated items
   const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;

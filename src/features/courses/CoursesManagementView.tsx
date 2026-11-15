@@ -27,8 +27,6 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  Layers,
-  Users,
   ExternalLink,
   AlertCircle,
   CheckCircle,

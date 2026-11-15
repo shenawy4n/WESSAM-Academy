@@ -20,7 +20,7 @@ export interface AcademicGroupMembership {
   id: string;
   name: string;
   nameArabic: string;
-  academicYear: string;
+  academicYear: string | null;
   isActive: boolean;
   archivedAt?: string | null;
   isPrimary: boolean;
@@ -31,10 +31,10 @@ export interface AccessibleStudentOption {
   id: string;
   fullName: string;
   fullNameArabic: string;
-  status: string;
+  status: string | null;
   studentNumber: string | null;
   username: string | null;
-  enrolledAt: string;
+  enrolledAt: string | null;
   groups: AcademicGroupMembership[];
 }
 
@@ -42,9 +42,9 @@ export interface AcademicCourseProgressRow {
   courseId: string;
   title: string;
   titleArabic: string;
-  level: string;
+  level: string | null;
   isPublished: boolean;
-  groups: { id: string; name: string; nameArabic: string; academicYear: string }[];
+  groups: { id: string; name: string; nameArabic: string; academicYear: string | null }[];
   totalLessons: number;
   completedLessons: number;
   pendingLessons: number;
@@ -66,7 +66,7 @@ export interface AcademicQuizRow {
   academicYear: string | null;
   attemptNumber: number;
   status: string;
-  passingScore: number;
+  passingScore: number | null;
   requiresManualGrading: boolean;
   isResultReleased: boolean;
   pointsScored: number | null;
@@ -94,9 +94,9 @@ export interface AcademicAssignmentRow {
   academicYear: string | null;
   attemptNumber: number;
   status: string;
-  maxScore: number;
+  maxScore: number | null;
   dueDate: string | null;
-  submittedAt: string;
+  submittedAt: string | null;
   isLate: boolean;
   gradedAt: string | null;
   isGradeReleased: boolean;
@@ -148,7 +148,7 @@ export interface AcademicSummaryMetrics {
   gradedAssignmentsCount: number;
   avgAssignmentPercentage: number | null;
   overallAcademicAveragePct: number | null;
-  passingThreshold: number;
+  passingThreshold: number | null;
   attendanceRatePct: number | null;
   lastLearningActivityAt: string | null;
 }
@@ -158,10 +158,10 @@ export interface StudentAcademicRecord {
     id: string;
     fullName: string;
     fullNameArabic: string;
-    status: string;
+    status: string | null;
     studentNumber: string | null;
     username: string | null;
-    enrolledAt: string;
+    enrolledAt: string | null;
     notes: string | null;
   };
   groups: AcademicGroupMembership[];
@@ -339,7 +339,12 @@ export function buildUnifiedTranscript(record: StudentAcademicRecord): UnifiedTr
 
   for (const a of record.assignments) {
     const hasScore = a.score !== null && a.percentageScore !== null;
-    const rawDisplay = hasScore ? `${a.score} / ${a.maxScore}` : null;
+    const rawDisplay =
+      hasScore && a.maxScore !== null
+        ? `${a.score} / ${a.maxScore}`
+        : hasScore
+        ? String(a.score)
+        : null;
 
     entries.push({
       id: `assignment-${a.id}`,
@@ -353,7 +358,7 @@ export function buildUnifiedTranscript(record: StudentAcademicRecord): UnifiedTr
       groupName: a.groupName,
       groupNameArabic: a.groupNameArabic,
       academicYear: a.academicYear,
-      eventAt: a.submittedAt,
+      eventAt: a.submittedAt || '',
       statusLabel: a.status,
       statusKey: a.status,
       rawScoreDisplay: rawDisplay,
@@ -484,12 +489,12 @@ export function mapRawAcademicRecord(raw: any): StudentAcademicRecord {
   return {
     student: {
       id: student.id,
-      fullName: student.full_name || 'Student',
-      fullNameArabic: student.full_name_arabic || student.full_name || 'طالب',
-      status: student.status || 'active',
+      fullName: student.full_name || '',
+      fullNameArabic: student.full_name_arabic || student.full_name || '',
+      status: student.status || null,
       studentNumber: student.student_number || null,
       username: student.username || null,
-      enrolledAt: student.enrolled_at || new Date().toISOString(),
+      enrolledAt: student.enrolled_at || null,
       notes: student.notes || null,
     },
     groups: Array.isArray(raw?.groups)
@@ -497,7 +502,7 @@ export function mapRawAcademicRecord(raw: any): StudentAcademicRecord {
           id: g.id,
           name: g.name,
           nameArabic: g.name_arabic || g.name,
-          academicYear: g.academic_year || '2026/2027',
+          academicYear: g.academic_year || null,
           isActive: Boolean(g.is_active),
           archivedAt: g.archived_at || null,
           isPrimary: Boolean(g.is_primary),
@@ -509,14 +514,14 @@ export function mapRawAcademicRecord(raw: any): StudentAcademicRecord {
           courseId: c.course_id,
           title: c.title,
           titleArabic: c.title_arabic || c.title,
-          level: c.level || 'beginner',
+          level: c.level || null,
           isPublished: Boolean(c.is_published),
           groups: Array.isArray(c.groups)
             ? c.groups.map((cg: any) => ({
                 id: cg.id,
                 name: cg.name,
                 nameArabic: cg.name_arabic || cg.name,
-                academicYear: cg.academic_year || '2026/2027',
+                academicYear: cg.academic_year || null,
               }))
             : [],
           totalLessons: Number(c.total_lessons ?? 0),
@@ -541,7 +546,7 @@ export function mapRawAcademicRecord(raw: any): StudentAcademicRecord {
           academicYear: q.academic_year || null,
           attemptNumber: Number(q.attempt_number ?? 1),
           status: q.status,
-          passingScore: Number(q.passing_score ?? 60),
+          passingScore: toNumOrNull(q.passing_score),
           requiresManualGrading: Boolean(q.requires_manual_grading),
           isResultReleased: Boolean(q.is_result_released),
           pointsScored: toNumOrNull(q.points_scored),
@@ -569,10 +574,10 @@ export function mapRawAcademicRecord(raw: any): StudentAcademicRecord {
           groupNameArabic: a.group_name_arabic || null,
           academicYear: a.academic_year || null,
           attemptNumber: Number(a.attempt_number ?? 1),
-          status: a.status || 'submitted',
-          maxScore: Number(a.max_score ?? 100),
+          status: a.status || '',
+          maxScore: toNumOrNull(a.max_score),
           dueDate: a.due_date || null,
-          submittedAt: a.submitted_at,
+          submittedAt: a.submitted_at || null,
           isLate: Boolean(a.is_late),
           gradedAt: a.graded_at || null,
           isGradeReleased: Boolean(a.is_grade_released),
@@ -624,7 +629,7 @@ export function mapRawAcademicRecord(raw: any): StudentAcademicRecord {
       gradedAssignmentsCount: Number(sum.graded_assignments_count ?? 0),
       avgAssignmentPercentage: toNumOrNull(sum.avg_assignment_percentage),
       overallAcademicAveragePct: toNumOrNull(sum.overall_academic_average_pct),
-      passingThreshold: Number(sum.passing_threshold ?? 60),
+      passingThreshold: toNumOrNull(sum.passing_threshold),
       attendanceRatePct: toNumOrNull(sum.attendance_rate_pct),
       lastLearningActivityAt: sum.last_learning_activity_at || null,
     },
@@ -1053,7 +1058,7 @@ async function fetchAccessibleStudentsDirect(
       id: g.id,
       name: g.name,
       nameArabic: g.name_arabic || g.name,
-      academicYear: g.academic_year || '2026/2027',
+      academicYear: g.academic_year || null,
       isActive: Boolean(g.is_active),
       archivedAt: g.archived_at ?? null,
       isPrimary: Boolean(primaryGroupId && g.id === primaryGroupId),
@@ -1071,12 +1076,12 @@ async function fetchAccessibleStudentsDirect(
       });
       return {
         id: p.id,
-        fullName: p.full_name,
-        fullNameArabic: p.full_name_arabic || p.full_name,
-        status: p.status || 'active',
+        fullName: p.full_name || '',
+        fullNameArabic: p.full_name_arabic || p.full_name || '',
+        status: p.status || null,
         studentNumber: sap?.student_number || null,
         username: sap?.username || null,
-        enrolledAt: sap?.enrolled_at || p.created_at,
+        enrolledAt: sap?.enrolled_at || p.created_at || null,
         groups,
       };
     })
@@ -1102,7 +1107,7 @@ export function buildDirectStudentAcademicRecord(params: {
   quizAttemptRows: any[];
   submissionRows: any[];
   attendanceRows: any[];
-  passingThreshold?: number;
+  passingThreshold?: number | null;
   filters?: AcademicRecordQueryFilters;
   teacherScope?: TeacherScope | null;
   assignmentTargetGroupIdsByAssignment?: Map<string, Set<string>>;
@@ -1119,7 +1124,7 @@ export function buildDirectStudentAcademicRecord(params: {
     quizAttemptRows,
     submissionRows,
     attendanceRows,
-    passingThreshold = 60,
+    passingThreshold = null,
     filters = {},
     teacherScope = null,
     assignmentTargetGroupIdsByAssignment = new Map(),
@@ -1149,7 +1154,7 @@ export function buildDirectStudentAcademicRecord(params: {
       id: g.id,
       name: g.name,
       nameArabic: g.name_arabic || g.name,
-      academicYear: g.academic_year || '2026/2027',
+      academicYear: g.academic_year || null,
       isActive: Boolean(g.is_active),
       archivedAt: g.archived_at ?? null,
       isPrimary: Boolean(primaryGroupId && g.id === primaryGroupId),
@@ -1172,9 +1177,9 @@ export function buildDirectStudentAcademicRecord(params: {
       courseId: string;
       title: string;
       titleArabic: string;
-      level: string;
+      level: string | null;
       isPublished: boolean;
-      groupsMap: Map<string, { id: string; name: string; nameArabic: string; academicYear: string }>;
+      groupsMap: Map<string, { id: string; name: string; nameArabic: string; academicYear: string | null }>;
     }
   >();
 
@@ -1206,7 +1211,7 @@ export function buildDirectStudentAcademicRecord(params: {
         courseId: c.id,
         title: c.title,
         titleArabic: c.title_arabic || c.title,
-        level: c.level || 'beginner',
+        level: c.level || null,
         isPublished: Boolean(c.is_published),
         groupsMap: new Map(),
       };
@@ -1216,7 +1221,7 @@ export function buildDirectStudentAcademicRecord(params: {
       id: g.id,
       name: g.name,
       nameArabic: g.name_arabic || g.name,
-      academicYear: g.academic_year || '2026/2027',
+      academicYear: g.academic_year || null,
     });
   }
 
@@ -1338,7 +1343,7 @@ export function buildDirectStudentAcademicRecord(params: {
       academicYear: g?.academic_year || null,
       attemptNumber: Number(qa.attempt_number ?? 1),
       status: qa.status,
-      passingScore: Number(q.passing_score ?? 60),
+      passingScore: toNumOrNull(q.passing_score),
       requiresManualGrading: Boolean(qa.requires_manual_grading),
       isResultReleased: canViewScore,
       pointsScored: canViewScore && isCompletedStatus ? toNumOrNull(qa.points_scored) : null,
@@ -1404,7 +1409,7 @@ export function buildDirectStudentAcademicRecord(params: {
       ? Boolean(s.is_grade_released)
       : rawScore !== null;
     const canViewGrade = isStaff ? rawScore !== null : isGradeReleased && rawScore !== null;
-    const maxScore = Number(a.max_score ?? 100);
+    const maxScore = toNumOrNull(a.max_score);
     const status =
       s.status || (rawScore !== null || s.graded_at ? 'graded' : 'submitted');
 
@@ -1424,21 +1429,25 @@ export function buildDirectStudentAcademicRecord(params: {
       status,
       maxScore,
       dueDate: a.due_date || null,
-      submittedAt: s.submitted_at,
+      submittedAt: s.submitted_at || null,
       isLate: Boolean(s.is_late),
       gradedAt: s.graded_at || null,
       isGradeReleased,
       releasedAt: s.released_at ?? (isGradeReleased ? s.graded_at || null : null),
       score: canViewGrade ? rawScore : null,
       percentageScore:
-        canViewGrade && rawScore !== null && maxScore > 0
+        canViewGrade && rawScore !== null && maxScore !== null && maxScore > 0
           ? round1((rawScore / maxScore) * 100)
           : null,
       teacherFeedback:
         canViewGrade || status === 'returned_for_revision' ? s.teacher_feedback || null : null,
     });
   }
-  assignments.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  assignments.sort((a, b) => {
+    const bt = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+    const at = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+    return bt - at;
+  });
 
   // Attendance History & Summary
   const seenAttendanceIds = new Set<string>();
@@ -1554,12 +1563,12 @@ export function buildDirectStudentAcademicRecord(params: {
   return {
     student: {
       id: studentProfile.id,
-      fullName: studentProfile.full_name || 'Student',
-      fullNameArabic: studentProfile.full_name_arabic || studentProfile.full_name || 'طالب',
-      status: studentProfile.status || 'active',
+      fullName: studentProfile.full_name || '',
+      fullNameArabic: studentProfile.full_name_arabic || studentProfile.full_name || '',
+      status: studentProfile.status || null,
       studentNumber: academicProfile?.student_number || null,
       username: academicProfile?.username || null,
-      enrolledAt: academicProfile?.enrolled_at || studentProfile.created_at,
+      enrolledAt: academicProfile?.enrolled_at || studentProfile.created_at || null,
       notes: isStaff ? academicProfile?.notes || null : null,
     },
     groups,
@@ -1821,8 +1830,8 @@ async function fetchStudentAcademicRecordDirect(
     return primary;
   };
 
-  const fetchPassingThresholdPromise = async (): Promise<number> => {
-    if (!caller.isStaff) return 60;
+  const fetchPassingThresholdPromise = async (): Promise<number | null> => {
+    if (!caller.isStaff) return null;
     try {
       const settingsRes = await client
         .from('system_settings')
@@ -1832,26 +1841,26 @@ async function fetchStudentAcademicRecordDirect(
 
       if (settingsRes.error) {
         if (isMissingSchemaFeatureError(settingsRes.error)) {
-          return 60;
+          return null;
         }
         const errCat = toServiceError(settingsRes.error, {
           service: SERVICE,
           operation: `${op}.settings`,
         });
         if (errCat.category === 'AUTHORIZATION_ERROR' || errCat.category === 'NOT_FOUND') {
-          return 60;
+          return null;
         }
         throw errCat;
       }
 
       const rawVal = (settingsRes.data as any)?.value?.default_passing_score;
       const parsed = Number(rawVal);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     } catch (err) {
       if (err instanceof ServiceError && err.category === 'NETWORK_ERROR') {
         throw err;
       }
-      return 60;
+      return null;
     }
   };
 
@@ -1859,7 +1868,7 @@ async function fetchStudentAcademicRecordDirect(
   let attendanceRes: any;
   let quizzesRes: any;
   let submissionsRes: any;
-  let passingThreshold = 60;
+  let passingThreshold: number | null = null;
 
   try {
     [groupCoursesRes, attendanceRes, quizzesRes, submissionsRes, passingThreshold] =
@@ -2065,18 +2074,18 @@ export async function fetchAccessibleStudentsForRecords(): Promise<AccessibleStu
   const rows = Array.isArray(res.data) ? res.data : [];
   return rows.map((r: any) => ({
     id: r.id,
-    fullName: r.full_name,
-    fullNameArabic: r.full_name_arabic || r.full_name,
-    status: r.status || 'active',
+    fullName: r.full_name || '',
+    fullNameArabic: r.full_name_arabic || r.full_name || '',
+    status: r.status || null,
     studentNumber: r.student_number || null,
     username: r.username || null,
-    enrolledAt: r.enrolled_at,
+    enrolledAt: r.enrolled_at || null,
     groups: Array.isArray(r.groups)
       ? r.groups.map((g: any) => ({
           id: g.id,
           name: g.name,
           nameArabic: g.name_arabic || g.name,
-          academicYear: g.academic_year || '2026/2027',
+          academicYear: g.academic_year || null,
           isActive: Boolean(g.is_active),
           archivedAt: g.archived_at || null,
           isPrimary: Boolean(g.is_primary),

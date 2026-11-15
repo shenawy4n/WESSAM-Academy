@@ -97,6 +97,7 @@ export function utcToRiyadhInputs(isoDateStr: string | null | undefined): { date
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    hourCycle: 'h23',
   });
 
   const parts = formatter.formatToParts(d);

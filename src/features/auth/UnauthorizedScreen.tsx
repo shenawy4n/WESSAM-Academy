@@ -9,7 +9,7 @@ import { useAuth } from './AuthContext';
 import { BrandLogo } from '../../components/shared/BrandLogo';
 import { LanguageSwitcher } from '../../components/shared/LanguageSwitcher';
 import { Button } from '../../components/ui/Button';
-import { ShieldAlert, ArrowLeft, ArrowRight, Home } from 'lucide-react';
+import { ShieldAlert, Home } from 'lucide-react';
 
 export const UnauthorizedScreen: React.FC<{ onReturn: () => void }> = ({ onReturn }) => {
   const { t, isRtl } = useLocale();

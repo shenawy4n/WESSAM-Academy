@@ -15,9 +15,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   RotateCcw,
-  Award,
   Send,
-  MessageSquare,
   Lock,
 } from 'lucide-react';
 import {
@@ -36,6 +34,7 @@ import {
   uploadAssignmentFile,
   getAssignmentFileSignedUrl,
 } from './assignmentService';
+import { openSafeExternalUrl } from '../../lib/safeDownload';
 
 interface StudentSubmissionModalProps {
   isOpen: boolean;
@@ -116,7 +115,7 @@ export const StudentSubmissionModal: React.FC<StudentSubmissionModalProps> = ({
   const handleDownloadTeacherAttachment = async (path: string) => {
     try {
       const url = await getAssignmentFileSignedUrl(path);
-      window.open(url, '_blank');
+      openSafeExternalUrl(url);
     } catch (err: any) {
       setErrorMessage(err.message || 'فشل تحميل الملف');
     }

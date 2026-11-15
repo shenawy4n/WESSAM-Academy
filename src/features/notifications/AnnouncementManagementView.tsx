@@ -8,19 +8,15 @@ import {
   Megaphone,
   Plus,
   Send,
-  Calendar,
   Clock,
   Archive,
   Trash2,
   Edit3,
   Search,
-  Filter,
   Users,
   User,
   CheckCircle2,
-  AlertTriangle,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react';
 import { useLocale } from '../../hooks/useLocale';
 import { useAuth } from '../auth/AuthContext';

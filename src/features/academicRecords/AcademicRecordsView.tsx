@@ -187,7 +187,7 @@ export const AcademicRecordsView: React.FC<AcademicRecordsViewProps> = ({
                   <option key={s.id} value={s.id}>
                     {isRtl ? s.fullNameArabic : s.fullName}
                     {s.studentNumber ? ` (${s.studentNumber})` : ''}
-                    {s.status !== 'active' ? ` [${s.status}]` : ''}
+                    {s.status && s.status !== 'active' ? ` [${s.status}]` : ''}
                   </option>
                 ))}
               </select>

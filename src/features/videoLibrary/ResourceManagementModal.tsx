@@ -13,9 +13,10 @@ import {
   deleteResource,
   getSecureResourceUrl,
 } from './videoLibraryService';
-import { getResourceTypeLabel, validateResourceType } from './videoLibraryUtils';
+import { getResourceTypeLabel } from './videoLibraryUtils';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { getErrorMessage } from '../../lib/errors/serviceError';
+import { openSafeExternalUrl } from '../../lib/safeDownload';
 import {
   X,
   Paperclip,
@@ -25,7 +26,6 @@ import {
   Trash2,
   FileText,
   AlertCircle,
-  CheckCircle2,
   Plus,
 } from 'lucide-react';
 
@@ -44,7 +44,7 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
   isOpen,
   onClose,
 }) => {
-  const { t, isRtl } = useLocale();
+  const { isRtl } = useLocale();
 
   const [resources, setResources] = useState<LearningResourceRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -175,7 +175,7 @@ export const ResourceManagementModal: React.FC<ResourceManagementModalProps> = (
     try {
       setErrorMsg(null);
       const url = await getSecureResourceUrl(resId);
-      window.open(url, '_blank', 'noopener,noreferrer');
+      openSafeExternalUrl(url);
     } catch (err: unknown) {
       setErrorMsg(getErrorMessage(err, isRtl));
     }

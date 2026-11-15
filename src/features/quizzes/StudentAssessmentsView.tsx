@@ -8,14 +8,10 @@ import {
   FileQuestion,
   Clock,
   Award,
-  CheckCircle2,
-  AlertCircle,
   Play,
   RotateCcw,
   Eye,
-  Calendar,
   Lock,
-  BookOpen,
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -212,7 +208,6 @@ export const StudentAssessmentsView: React.FC = () => {
             const isInProgress = quiz.studentState === 'in_progress';
             const isAvailable = quiz.studentState === 'available';
             const isCompleted = quiz.studentState === 'completed';
-            const isUpcoming = quiz.studentState === 'upcoming';
 
             return (
               <Card key={quiz.id} className="p-5 flex flex-col justify-between hover:border-slate-300 transition-all">

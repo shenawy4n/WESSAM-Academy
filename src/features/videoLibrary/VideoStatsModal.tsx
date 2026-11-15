@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
-  TrendingUp,
 } from 'lucide-react';
 
 interface VideoStatsModalProps {
@@ -30,7 +29,7 @@ export const VideoStatsModal: React.FC<VideoStatsModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { t, isRtl } = useLocale();
+  const { isRtl } = useLocale();
   const [stats, setStats] = useState<VideoStatsRecord | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<unknown>(null);

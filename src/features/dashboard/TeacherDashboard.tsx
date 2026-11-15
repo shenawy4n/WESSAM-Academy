@@ -20,12 +20,8 @@ import {
   CheckCircle2,
   Plus,
   Calendar,
-  Sparkles,
-  ArrowUpRight,
   ShieldCheck,
   GraduationCap,
-  Clock,
-  Video,
   MessageSquare,
 } from 'lucide-react';
 import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
@@ -212,7 +208,9 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
             <span>{t.common.brandName} · {t.common.saudiArabia}</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-            {isRtl ? `أهلاً بك، ${user?.fullNameArabic || 'أ. وسام إبراهيم دراز'}` : `Welcome, ${user?.fullName || 'Mr. Wessam Ibrahim Draz'}`}
+            {isRtl
+              ? `أهلاً بك، ${user?.fullNameArabic || user?.fullName || ''}`
+              : `Welcome, ${user?.fullName || user?.fullNameArabic || ''}`}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-1.5 leading-relaxed">
             {t.teacherDashboard.welcomeMessage}
@@ -481,7 +479,9 @@ export const TeacherDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               </p>
               <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
                 <span>{t.common.timezoneNotice}</span>
-                <span className="font-mono text-slate-600">v1.0.0-phase1</span>
+                <span className="font-medium text-slate-600">
+                  {isRtl ? 'بوابة الإدارة الأكاديمية' : 'Academic Management'}
+                </span>
               </div>
             </CardContent>
           </Card>

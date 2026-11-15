@@ -10,7 +10,6 @@ import {
   Calendar,
   Clock,
   Users,
-  Video,
   UserCheck,
   Edit2,
   Trash2,
@@ -18,15 +17,12 @@ import {
   ExternalLink,
   Copy,
   Check,
-  Filter,
   CheckCircle2,
   XCircle,
-  AlertCircle,
   BookOpen,
 } from 'lucide-react';
-import { Card, CardHeader, CardContent } from '../../components/ui/Card';
+import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -41,6 +37,7 @@ import {
 import { SessionModal } from './SessionModal';
 import { AttendanceSheetModal } from './AttendanceSheetModal';
 import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
+import { openSafeExternalUrl } from '../../lib/safeDownload';
 import { requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 
 export const LiveSessionsManagementView: React.FC = () => {
@@ -138,7 +135,7 @@ export const LiveSessionsManagementView: React.FC = () => {
       if (!link) {
         throw new Error(isRtl ? 'رابط الحصة غير متوفر حالياً' : 'Meeting link is not available');
       }
-      window.open(link, '_blank', 'noopener,noreferrer');
+      openSafeExternalUrl(link);
     } catch (err: unknown) {
       setActionError(err);
     }
@@ -175,7 +172,6 @@ export const LiveSessionsManagementView: React.FC = () => {
   };
 
   const upcomingCount = sessions.filter((s) => s.status === 'scheduled').length;
-  const liveCount = sessions.filter((s) => s.status === 'live' || isSessionLive(s.startTime, s.endTime)).length;
 
   return (
     <div className="space-y-6">

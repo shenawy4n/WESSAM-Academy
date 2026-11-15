@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { UserRole, AccountStatus } from './auth';
+import { UserRole } from './auth';
 
 export interface Group {
   id: string;

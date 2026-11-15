@@ -9,6 +9,7 @@ import {
   validateDownloadUrl,
   sanitizeDownloadFileName,
   triggerSafeResourceDownload,
+  openSafeExternalUrl,
 } from './safeDownload';
 
 test('validateDownloadUrl - accepts valid HTTPS and local dev URLs', () => {
@@ -42,4 +43,11 @@ test('triggerSafeResourceDownload - returns validated URL in non-DOM test enviro
   const url = 'https://xyz.supabase.co/storage/v1/object/sign/learning-resources/handout.pdf?token=123';
   const result = triggerSafeResourceDownload(url, { fileName: 'Handout', fileType: 'pdf' });
   assert.equal(result, url);
+});
+
+test('openSafeExternalUrl - accepts valid HTTPS links and rejects javascript: or embedded credentials', () => {
+  const meetingUrl = 'https://zoom.us/j/123456789';
+  assert.equal(openSafeExternalUrl(meetingUrl), meetingUrl);
+  assert.throws(() => openSafeExternalUrl('javascript:alert(1)'), /Unsafe download URL protocol/);
+  assert.throws(() => openSafeExternalUrl('https://user:secret@zoom.us/j/123'), /embedded credentials/i);
 });

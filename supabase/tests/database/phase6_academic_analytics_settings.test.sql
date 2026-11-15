@@ -16,7 +16,7 @@
 -- ==============================================================================
 
 BEGIN;
-SELECT plan(14);
+SELECT plan(17);
 
 -- Setup synthetic test users
 DO $$
@@ -206,6 +206,30 @@ SELECT throws_ok(
     'P0001',
     NULL,
     'Last active Super Admin cannot be demoted'
+);
+
+-- 12. Student blocked from calling get_question_bank_stats()
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111104', true);
+SELECT throws_ok(
+    $$ SELECT public.get_question_bank_stats() $$,
+    '42501',
+    NULL,
+    'Student cannot call get_question_bank_stats RPC'
+);
+
+-- 13. Analytics respects academic_year when p_group_id IS NULL (filtering out mismatched academic year courses)
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111102', true);
+SELECT is(
+    ((public.get_phase6_analytics_dashboard(NULL, NULL, NULL, NULL, '2099/2100', NULL))->'kpis'->>'published_courses_count')::int,
+    0,
+    'Analytics published_courses_count respects academic_year even when group filter is omitted'
+);
+
+-- 14. Teacher gets positive published_courses_count for matching academic_year
+SELECT is(
+    ((public.get_phase6_analytics_dashboard(NULL, NULL, NULL, NULL, '2026/2027', NULL))->'kpis'->>'published_courses_count')::int,
+    1,
+    'Analytics published_courses_count returns course assigned to matching academic_year'
 );
 
 SELECT * FROM finish();

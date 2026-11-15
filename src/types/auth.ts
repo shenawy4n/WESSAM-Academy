@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'super_admin' | 'teacher' | 'student' | 'moderator';
+export type UserRole = 'super_admin' | 'teacher' | 'student';
 
 export type AccountStatus = 'active' | 'inactive' | 'suspended';
 

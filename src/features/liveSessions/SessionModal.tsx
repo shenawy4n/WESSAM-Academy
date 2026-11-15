@@ -79,7 +79,6 @@ export const SessionModal: React.FC<SessionModalProps> = ({
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [lessons, setLessons] = useState<LessonOption[]>([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,7 +88,6 @@ export const SessionModal: React.FC<SessionModalProps> = ({
 
     async function loadSelectOptions() {
       try {
-        setLoading(true);
         const client = requireSupabaseClient({ service: 'SessionModal', operation: 'loadSelectOptions' });
         const [grpRes, crsRes, lsnRes] = await Promise.all([
           client
@@ -137,8 +135,6 @@ export const SessionModal: React.FC<SessionModalProps> = ({
         );
       } catch (err: unknown) {
         setError(getErrorMessage(err, isRtl));
-      } finally {
-        setLoading(false);
       }
     }
 

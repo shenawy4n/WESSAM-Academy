@@ -16,7 +16,6 @@ import {
   Lock,
   Mail,
   GraduationCap,
-  Sparkles,
   Clock,
   ArrowRight,
   ArrowLeft,

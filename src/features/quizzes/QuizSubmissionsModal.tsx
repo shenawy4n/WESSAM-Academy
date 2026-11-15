@@ -6,13 +6,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   UserCheck,
-  CheckCircle2,
-  Clock,
   AlertCircle,
-  FileText,
   Search,
   Check,
-  Award,
   MessageSquare,
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';

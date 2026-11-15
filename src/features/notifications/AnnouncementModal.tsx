@@ -3,17 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Megaphone,
   Calendar,
-  Clock,
   Users,
-  User,
   AlertTriangle,
   Link,
   Eye,
-  CheckCircle2,
   Send,
   Save,
 } from 'lucide-react';
@@ -26,7 +23,7 @@ import {
   NotificationPriority,
   TargetAudience,
 } from './types';
-import { resolveCategoryBadge, resolvePriorityBadge, formatNotificationTime } from './notificationUtils';
+import { resolvePriorityBadge } from './notificationUtils';
 import { requireSupabaseClient, throwServiceError } from '../../lib/errors/serviceError';
 import { ErrorState } from '../../components/ui/ErrorState';
 
@@ -67,6 +64,45 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cohortError, setCohortError] = useState<unknown>(null);
   const [submitError, setSubmitError] = useState<unknown>(null);
+
+  const loadCohortData = useCallback(async () => {
+    setCohortError(null);
+    try {
+      const client = requireSupabaseClient({ service: 'AnnouncementModal', operation: 'loadCohortData' });
+      const [groupsRes, studentsRes] = await Promise.all([
+        client.from('groups').select('id, name, name_arabic').eq('is_active', true),
+        client.from('profiles').select('id, full_name, full_name_arabic').eq('role', 'student').eq('status', 'active'),
+      ]);
+
+      if (groupsRes.error) {
+        throwServiceError(groupsRes.error, { service: 'AnnouncementModal', operation: 'loadGroups' });
+      }
+      if (studentsRes.error) {
+        throwServiceError(studentsRes.error, { service: 'AnnouncementModal', operation: 'loadStudents' });
+      }
+
+      const loadedGroups = (groupsRes.data || []).map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        nameArabic: g.name_arabic,
+      }));
+      setGroups(loadedGroups);
+      if (loadedGroups.length > 0) {
+        setGroupId((prev) => prev || loadedGroups[0].id);
+      }
+
+      const loadedStudents = (studentsRes.data || []).map((s: any) => ({
+        id: s.id,
+        name: s.full_name || s.full_name_arabic || 'Student',
+      }));
+      setStudents(loadedStudents);
+      if (loadedStudents.length > 0) {
+        setStudentId((prev) => prev || loadedStudents[0].id);
+      }
+    } catch (err) {
+      setCohortError(err);
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -110,46 +146,7 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
       setActiveTab('edit');
       loadCohortData();
     }
-  }, [isOpen, announcement]);
-
-  const loadCohortData = async () => {
-    setCohortError(null);
-    try {
-      const client = requireSupabaseClient({ service: 'AnnouncementModal', operation: 'loadCohortData' });
-      const [groupsRes, studentsRes] = await Promise.all([
-        client.from('groups').select('id, name, name_arabic').eq('is_active', true),
-        client.from('profiles').select('id, full_name, full_name_arabic').eq('role', 'student').eq('status', 'active'),
-      ]);
-
-      if (groupsRes.error) {
-        throwServiceError(groupsRes.error, { service: 'AnnouncementModal', operation: 'loadGroups' });
-      }
-      if (studentsRes.error) {
-        throwServiceError(studentsRes.error, { service: 'AnnouncementModal', operation: 'loadStudents' });
-      }
-
-      const loadedGroups = (groupsRes.data || []).map((g: any) => ({
-        id: g.id,
-        name: g.name,
-        nameArabic: g.name_arabic,
-      }));
-      setGroups(loadedGroups);
-      if (loadedGroups.length > 0 && !groupId) {
-        setGroupId(loadedGroups[0].id);
-      }
-
-      const loadedStudents = (studentsRes.data || []).map((s: any) => ({
-        id: s.id,
-        name: s.full_name || s.full_name_arabic || 'Student',
-      }));
-      setStudents(loadedStudents);
-      if (loadedStudents.length > 0 && !studentId) {
-        setStudentId(loadedStudents[0].id);
-      }
-    } catch (err) {
-      setCohortError(err);
-    }
-  };
+  }, [isOpen, announcement, loadCohortData]);
 
   const getFormData = (): AnnouncementFormData => {
     let scheduledForIso: string | undefined = undefined;

@@ -5,10 +5,8 @@
 
 import { formatRiyadhDateTime } from '../../lib/dateUtils';
 import {
-  AssignmentRecord,
   AssignmentType,
   CreateAssignmentPayload,
-  SubmissionRecord,
 } from './types';
 
 export const ASSIGNMENT_TYPES: { value: AssignmentType; labelAr: string; labelEn: string }[] = [
@@ -174,7 +172,7 @@ export function getAssignmentDeadlineStatus(
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffHours / 24);
 
-  let labelAr = '';
+  let labelAr: string;
   if (diffDays > 1) {
     labelAr = `متبقي ${diffDays} أيام`;
   } else if (diffHours > 0) {

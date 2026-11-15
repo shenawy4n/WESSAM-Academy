@@ -17,7 +17,6 @@ import {
 import { fetchGroups, GroupRecord } from '../groups/groupService';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { StatusIndicator } from '../../components/ui/StatusIndicator';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -27,22 +26,16 @@ import {
   Users,
   UserPlus,
   Search,
-  Filter,
   Eye,
   Edit2,
   KeyRound,
   ShieldAlert,
   GraduationCap,
-  Calendar,
-  Phone,
-  Hash,
-  AtSign,
   AlertCircle,
   CheckCircle2,
   Lock,
   ChevronLeft,
   ChevronRight,
-  BookOpen,
   Award,
 } from 'lucide-react';
 

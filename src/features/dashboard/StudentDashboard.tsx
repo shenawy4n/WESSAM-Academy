@@ -11,13 +11,12 @@ import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import {
   BookOpen,
   Radio,
   ClipboardList,
   Award,
-  Bell,
-  Sparkles,
   PlayCircle,
   GraduationCap,
   Calendar,
@@ -25,6 +24,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { formatRiyadhDateTime, isSessionLive } from '../../lib/dateUtils';
+import { openSafeExternalUrl } from '../../lib/safeDownload';
 import { getAuthorizedMeetingLink } from '../liveSessions/liveSessionsService';
 import { fetchStudentAssignments } from '../assignments/assignmentService';
 import { messagingService } from '../messaging/messagingService';
@@ -142,7 +142,7 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
           operation: 'handleJoinClass',
         });
       }
-      window.open(link, '_blank', 'noopener,noreferrer');
+      openSafeExternalUrl(link);
     } catch (err) {
       setJoinError(err);
     } finally {
@@ -217,7 +217,11 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
               }
             />
             <CardContent>
-              {error ? (
+              {loading ? (
+                <div className="py-6 flex justify-center">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : error ? (
                 <ErrorState error={error} isRtl={isRtl} onRetry={loadStudentData} />
               ) : coursesCount === 0 ? (
                 <EmptyState
@@ -458,12 +462,24 @@ export const StudentDashboard: React.FC<{ onNavigate: (view: string) => void }> 
             <CardHeader
               title={t.studentDashboard.recentResults}
               subtitle={isRtl ? 'درجات الاختبارات والتقييمات' : 'Exam and quiz performance records'}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigate('results')}
+                  icon={<Award className="w-3.5 h-3.5" />}
+                >
+                  {isRtl ? 'السجل الأكاديمي' : 'View Results'}
+                </Button>
+              }
             />
             <CardContent>
               <EmptyState
                 icon={<Award className="w-6 h-6 text-slate-400" />}
                 title={t.studentDashboard.noRecentResults}
-                description={isRtl ? 'سجلك الأكاديمي ودرجات التقييمات ستُحفظ هنا فور إتمامها وتصحيحها.' : 'Grades and teacher evaluations will be listed here.'}
+                description={isRtl ? 'استعرض كشف درجاتك، نتائج الاختبارات، وتقديرات الواجبات في السجل الأكاديمي.' : 'Review your graded quizzes, assignments, and attendance transcript in Academic Records.'}
+                actionLabel={isRtl ? 'عرض النتائج' : 'Open Results'}
+                onAction={() => onNavigate('results')}
               />
             </CardContent>
           </Card>

@@ -6,14 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   UserCheck,
-  Calendar,
-  Users,
-  AlertCircle,
-  FileSpreadsheet,
-  Percent,
   CheckCircle2,
   Clock,
-  XCircle,
   ShieldAlert,
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';

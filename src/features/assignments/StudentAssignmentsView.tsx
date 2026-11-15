@@ -8,8 +8,6 @@ import {
   FileText,
   Calendar,
   Clock,
-  CheckCircle2,
-  AlertTriangle,
   RotateCcw,
   Search,
   BookOpen,
