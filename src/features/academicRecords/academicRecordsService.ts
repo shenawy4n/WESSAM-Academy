@@ -221,6 +221,151 @@ export interface AcademicRecordQueryFilters {
   dateTo?: string | null;
 }
 
+function academicContractError(fieldPath: string, detail: string): ServiceError {
+  return new ServiceError({
+    category: 'DATABASE_ERROR',
+    code: 'INVALID_ACADEMIC_RECORD_CONTRACT',
+    message: `Academic record payload contract violation at "${fieldPath}": ${detail}`,
+    service: SERVICE,
+    operation: 'mapRawAcademicRecord',
+  });
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return Boolean(v && typeof v === 'object' && !Array.isArray(v));
+}
+
+function hasOwn(obj: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function readRequiredObject(
+  parent: Record<string, unknown>,
+  key: string,
+  path: string
+): Record<string, unknown> {
+  if (!hasOwn(parent, key) || !isPlainObject(parent[key])) {
+    throw academicContractError(path, 'expected non-null object');
+  }
+  return parent[key] as Record<string, unknown>;
+}
+
+function readRequiredArray(
+  parent: Record<string, unknown>,
+  key: string,
+  path: string
+): unknown[] {
+  if (!hasOwn(parent, key) || !Array.isArray(parent[key])) {
+    throw academicContractError(path, 'expected array');
+  }
+  return parent[key] as unknown[];
+}
+
+function parseStrictFiniteNumber(val: unknown, path: string): number {
+  if (typeof val === 'boolean' || (typeof val === 'string' && val.trim() === '')) {
+    throw academicContractError(path, 'expected finite number');
+  }
+  if (typeof val !== 'number' && typeof val !== 'string') {
+    throw academicContractError(path, 'expected finite number');
+  }
+  const n = Number(val);
+  if (!Number.isFinite(n)) {
+    throw academicContractError(path, 'expected finite number');
+  }
+  return n;
+}
+
+function readRequiredFiniteNumber(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string
+): number {
+  if (!hasOwn(obj, key) || obj[key] === undefined) {
+    throw academicContractError(path, 'missing required numeric field');
+  }
+  if (obj[key] === null) {
+    throw academicContractError(path, 'required numeric field cannot be null');
+  }
+  return parseStrictFiniteNumber(obj[key], path);
+}
+
+function readNullableFiniteNumber(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string,
+  options: { allowOmitted?: boolean } = {}
+): number | null {
+  if (!hasOwn(obj, key) || obj[key] === undefined) {
+    if (options.allowOmitted) return null;
+    throw academicContractError(path, 'missing nullable numeric field');
+  }
+  if (obj[key] === null) {
+    return null;
+  }
+  return parseStrictFiniteNumber(obj[key], path);
+}
+
+function readRequiredBoolean(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string
+): boolean {
+  if (!hasOwn(obj, key) || typeof obj[key] !== 'boolean') {
+    throw academicContractError(path, 'expected boolean');
+  }
+  return obj[key] as boolean;
+}
+
+function readNullableBoolean(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string,
+  options: { allowOmitted?: boolean } = {}
+): boolean | null {
+  if (!hasOwn(obj, key) || obj[key] === undefined) {
+    if (options.allowOmitted) return null;
+    throw academicContractError(path, 'missing nullable boolean field');
+  }
+  if (obj[key] === null) {
+    return null;
+  }
+  if (typeof obj[key] !== 'boolean') {
+    throw academicContractError(path, 'expected boolean or null');
+  }
+  return obj[key] as boolean;
+}
+
+function readRequiredString(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string
+): string {
+  if (!hasOwn(obj, key) || typeof obj[key] !== 'string' || obj[key].trim() === '') {
+    throw academicContractError(path, 'expected non-empty string');
+  }
+  return obj[key] as string;
+}
+
+function readNullableString(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string,
+  options: { allowOmitted?: boolean } = {}
+): string | null {
+  if (!hasOwn(obj, key) || obj[key] === undefined) {
+    if (options.allowOmitted) return null;
+    throw academicContractError(path, 'missing nullable string field');
+  }
+  if (obj[key] === null) {
+    return null;
+  }
+  if (typeof obj[key] !== 'string') {
+    throw academicContractError(path, 'expected string or null');
+  }
+  const str = obj[key] as string;
+  return str.trim() === '' ? null : str;
+}
+
 function toNumOrNull(val: unknown): number | null {
   if (val === null || val === undefined || val === '') return null;
   const n = Number(val);
@@ -481,159 +626,393 @@ export function formatRecordTimestampRiyadh(iso: string | null | undefined, loca
   return formatted || '—';
 }
 
-export function mapRawAcademicRecord(raw: any): StudentAcademicRecord {
-  const student = raw?.student || {};
-  const attSum = raw?.attendance_summary || {};
-  const sum = raw?.summary || {};
+export function mapRawAcademicRecord(raw: unknown): StudentAcademicRecord {
+  if (!isPlainObject(raw)) {
+    throw academicContractError('root', 'expected non-null academic record object');
+  }
+
+  const student = readRequiredObject(raw, 'student', 'student');
+  const groupsRaw = readRequiredArray(raw, 'groups', 'groups');
+  const coursesRaw = readRequiredArray(raw, 'courses', 'courses');
+  const quizzesRaw = readRequiredArray(raw, 'quizzes', 'quizzes');
+  const assignmentsRaw = readRequiredArray(raw, 'assignments', 'assignments');
+  const attendanceRaw = readRequiredArray(raw, 'attendance', 'attendance');
+  const attSum = readRequiredObject(raw, 'attendance_summary', 'attendance_summary');
+  const sum = readRequiredObject(raw, 'summary', 'summary');
+  const timezone = readRequiredString(raw, 'timezone', 'timezone');
+
+  const studentFullName =
+    readNullableString(student, 'full_name', 'student.full_name', { allowOmitted: true }) ?? '';
+  const studentFullNameArabic =
+    readNullableString(student, 'full_name_arabic', 'student.full_name_arabic', {
+      allowOmitted: true,
+    }) || studentFullName;
 
   return {
     student: {
-      id: student.id,
-      fullName: student.full_name || '',
-      fullNameArabic: student.full_name_arabic || student.full_name || '',
-      status: student.status || null,
-      studentNumber: student.student_number || null,
-      username: student.username || null,
-      enrolledAt: student.enrolled_at || null,
-      notes: student.notes || null,
+      id: readRequiredString(student, 'id', 'student.id'),
+      fullName: studentFullName,
+      fullNameArabic: studentFullNameArabic,
+      status: readNullableString(student, 'status', 'student.status', { allowOmitted: true }),
+      studentNumber: readNullableString(student, 'student_number', 'student.student_number', {
+        allowOmitted: true,
+      }),
+      username: readNullableString(student, 'username', 'student.username', { allowOmitted: true }),
+      enrolledAt: readNullableString(student, 'enrolled_at', 'student.enrolled_at', {
+        allowOmitted: true,
+      }),
+      notes: readNullableString(student, 'notes', 'student.notes', { allowOmitted: true }),
     },
-    groups: Array.isArray(raw?.groups)
-      ? raw.groups.map((g: any) => ({
-          id: g.id,
-          name: g.name,
-          nameArabic: g.name_arabic || g.name,
-          academicYear: g.academic_year || null,
-          isActive: Boolean(g.is_active),
-          archivedAt: g.archived_at || null,
-          isPrimary: Boolean(g.is_primary),
-          joinedAt: g.joined_at || null,
-        }))
-      : [],
-    courses: Array.isArray(raw?.courses)
-      ? raw.courses.map((c: any) => ({
-          courseId: c.course_id,
-          title: c.title,
-          titleArabic: c.title_arabic || c.title,
-          level: c.level || null,
-          isPublished: Boolean(c.is_published),
-          groups: Array.isArray(c.groups)
-            ? c.groups.map((cg: any) => ({
-                id: cg.id,
-                name: cg.name,
-                nameArabic: cg.name_arabic || cg.name,
-                academicYear: cg.academic_year || null,
-              }))
-            : [],
-          totalLessons: Number(c.total_lessons ?? 0),
-          completedLessons: Number(c.completed_lessons ?? 0),
-          pendingLessons: Number(c.pending_lessons ?? 0),
-          progressPercentage: toNumOrNull(c.progress_percentage),
-          lastAccessedAt: c.last_accessed_at || null,
-        }))
-      : [],
-    quizzes: Array.isArray(raw?.quizzes)
-      ? raw.quizzes.map((q: any) => ({
-          id: q.id,
-          quizId: q.quiz_id,
-          title: q.title,
-          titleArabic: q.title_arabic || q.title,
-          courseId: q.course_id || null,
-          courseTitle: q.course_title || null,
-          courseTitleArabic: q.course_title_arabic || null,
-          groupId: q.group_id || null,
-          groupName: q.group_name || null,
-          groupNameArabic: q.group_name_arabic || null,
-          academicYear: q.academic_year || null,
-          attemptNumber: Number(q.attempt_number ?? 1),
-          status: q.status,
-          passingScore: toNumOrNull(q.passing_score),
-          requiresManualGrading: Boolean(q.requires_manual_grading),
-          isResultReleased: Boolean(q.is_result_released),
-          pointsScored: toNumOrNull(q.points_scored),
-          totalPointsPossible: toNumOrNull(q.total_points_possible),
-          percentageScore: toNumOrNull(q.percentage_score),
-          isPassed: typeof q.is_passed === 'boolean' ? q.is_passed : null,
-          teacherFeedback: q.teacher_feedback || null,
-          startedAt: q.started_at,
-          submittedAt: q.submitted_at || null,
-          gradedAt: q.graded_at || null,
-          eventAt: q.event_at || q.submitted_at || q.started_at,
-        }))
-      : [],
-    assignments: Array.isArray(raw?.assignments)
-      ? raw.assignments.map((a: any) => ({
-          id: a.id,
-          assignmentId: a.assignment_id,
-          title: a.title,
-          titleArabic: a.title_arabic || a.title,
-          courseId: a.course_id || null,
-          courseTitle: a.course_title || null,
-          courseTitleArabic: a.course_title_arabic || null,
-          groupId: a.group_id || null,
-          groupName: a.group_name || null,
-          groupNameArabic: a.group_name_arabic || null,
-          academicYear: a.academic_year || null,
-          attemptNumber: Number(a.attempt_number ?? 1),
-          status: a.status || '',
-          maxScore: toNumOrNull(a.max_score),
-          dueDate: a.due_date || null,
-          submittedAt: a.submitted_at || null,
-          isLate: Boolean(a.is_late),
-          gradedAt: a.graded_at || null,
-          isGradeReleased: Boolean(a.is_grade_released),
-          releasedAt: a.released_at || null,
-          score: toNumOrNull(a.score),
-          percentageScore: toNumOrNull(a.percentage_score),
-          teacherFeedback: a.teacher_feedback || null,
-        }))
-      : [],
-    attendance: Array.isArray(raw?.attendance)
-      ? raw.attendance.map((att: any) => ({
-          id: att.id,
-          sessionId: att.session_id,
-          sessionTitle: att.session_title,
-          sessionTitleArabic: att.session_title_arabic || null,
-          courseId: att.course_id || null,
-          courseTitle: att.course_title || null,
-          courseTitleArabic: att.course_title_arabic || null,
-          groupId: att.group_id || null,
-          groupName: att.group_name || null,
-          groupNameArabic: att.group_name_arabic || null,
-          startTime: att.start_time,
-          status: att.status,
-          joinedAt: att.joined_at || null,
-          recordedAt: att.recorded_at,
-          notes: att.notes || null,
-        }))
-      : [],
+    groups: groupsRaw.map((g, idx) => {
+      const path = `groups[${idx}]`;
+      if (!isPlainObject(g)) {
+        throw academicContractError(path, 'expected object');
+      }
+      const name = readRequiredString(g, 'name', `${path}.name`);
+      const nameArabic =
+        readNullableString(g, 'name_arabic', `${path}.name_arabic`, { allowOmitted: true }) || name;
+      return {
+        id: readRequiredString(g, 'id', `${path}.id`),
+        name,
+        nameArabic,
+        academicYear: readNullableString(g, 'academic_year', `${path}.academic_year`, {
+          allowOmitted: true,
+        }),
+        isActive: readRequiredBoolean(g, 'is_active', `${path}.is_active`),
+        archivedAt: readNullableString(g, 'archived_at', `${path}.archived_at`, {
+          allowOmitted: true,
+        }),
+        isPrimary: readRequiredBoolean(g, 'is_primary', `${path}.is_primary`),
+        joinedAt: readNullableString(g, 'joined_at', `${path}.joined_at`, { allowOmitted: true }),
+      };
+    }),
+    courses: coursesRaw.map((c, idx) => {
+      const path = `courses[${idx}]`;
+      if (!isPlainObject(c)) {
+        throw academicContractError(path, 'expected object');
+      }
+      const title = readRequiredString(c, 'title', `${path}.title`);
+      const titleArabic =
+        readNullableString(c, 'title_arabic', `${path}.title_arabic`, { allowOmitted: true }) ||
+        title;
+      const courseGroupsRaw = readRequiredArray(c, 'groups', `${path}.groups`);
+      return {
+        courseId: readRequiredString(c, 'course_id', `${path}.course_id`),
+        title,
+        titleArabic,
+        level: readNullableString(c, 'level', `${path}.level`, { allowOmitted: true }),
+        isPublished: readRequiredBoolean(c, 'is_published', `${path}.is_published`),
+        groups: courseGroupsRaw.map((cg, cgIdx) => {
+          const cgPath = `${path}.groups[${cgIdx}]`;
+          if (!isPlainObject(cg)) {
+            throw academicContractError(cgPath, 'expected object');
+          }
+          const cgName = readRequiredString(cg, 'name', `${cgPath}.name`);
+          return {
+            id: readRequiredString(cg, 'id', `${cgPath}.id`),
+            name: cgName,
+            nameArabic:
+              readNullableString(cg, 'name_arabic', `${cgPath}.name_arabic`, {
+                allowOmitted: true,
+              }) || cgName,
+            academicYear: readNullableString(cg, 'academic_year', `${cgPath}.academic_year`, {
+              allowOmitted: true,
+            }),
+          };
+        }),
+        totalLessons: readRequiredFiniteNumber(c, 'total_lessons', `${path}.total_lessons`),
+        completedLessons: readRequiredFiniteNumber(
+          c,
+          'completed_lessons',
+          `${path}.completed_lessons`
+        ),
+        pendingLessons: readRequiredFiniteNumber(c, 'pending_lessons', `${path}.pending_lessons`),
+        progressPercentage: readNullableFiniteNumber(
+          c,
+          'progress_percentage',
+          `${path}.progress_percentage`
+        ),
+        lastAccessedAt: readNullableString(c, 'last_accessed_at', `${path}.last_accessed_at`, {
+          allowOmitted: true,
+        }),
+      };
+    }),
+    quizzes: quizzesRaw.map((q, idx) => {
+      const path = `quizzes[${idx}]`;
+      if (!isPlainObject(q)) {
+        throw academicContractError(path, 'expected object');
+      }
+      const title = readRequiredString(q, 'title', `${path}.title`);
+      const titleArabic =
+        readNullableString(q, 'title_arabic', `${path}.title_arabic`, { allowOmitted: true }) ||
+        title;
+      const startedAt = readRequiredString(q, 'started_at', `${path}.started_at`);
+      const submittedAt = readNullableString(q, 'submitted_at', `${path}.submitted_at`, {
+        allowOmitted: true,
+      });
+      const eventAt =
+        readNullableString(q, 'event_at', `${path}.event_at`, { allowOmitted: true }) ||
+        submittedAt ||
+        startedAt;
+
+      return {
+        id: readRequiredString(q, 'id', `${path}.id`),
+        quizId: readRequiredString(q, 'quiz_id', `${path}.quiz_id`),
+        title,
+        titleArabic,
+        courseId: readNullableString(q, 'course_id', `${path}.course_id`, { allowOmitted: true }),
+        courseTitle: readNullableString(q, 'course_title', `${path}.course_title`, {
+          allowOmitted: true,
+        }),
+        courseTitleArabic: readNullableString(
+          q,
+          'course_title_arabic',
+          `${path}.course_title_arabic`,
+          { allowOmitted: true }
+        ),
+        groupId: readNullableString(q, 'group_id', `${path}.group_id`, { allowOmitted: true }),
+        groupName: readNullableString(q, 'group_name', `${path}.group_name`, {
+          allowOmitted: true,
+        }),
+        groupNameArabic: readNullableString(q, 'group_name_arabic', `${path}.group_name_arabic`, {
+          allowOmitted: true,
+        }),
+        academicYear: readNullableString(q, 'academic_year', `${path}.academic_year`, {
+          allowOmitted: true,
+        }),
+        attemptNumber: readRequiredFiniteNumber(q, 'attempt_number', `${path}.attempt_number`),
+        status: readRequiredString(q, 'status', `${path}.status`),
+        passingScore: readNullableFiniteNumber(q, 'passing_score', `${path}.passing_score`, {
+          allowOmitted: true,
+        }),
+        requiresManualGrading: readRequiredBoolean(
+          q,
+          'requires_manual_grading',
+          `${path}.requires_manual_grading`
+        ),
+        isResultReleased: readRequiredBoolean(
+          q,
+          'is_result_released',
+          `${path}.is_result_released`
+        ),
+        pointsScored: readNullableFiniteNumber(q, 'points_scored', `${path}.points_scored`),
+        totalPointsPossible: readNullableFiniteNumber(
+          q,
+          'total_points_possible',
+          `${path}.total_points_possible`
+        ),
+        percentageScore: readNullableFiniteNumber(
+          q,
+          'percentage_score',
+          `${path}.percentage_score`
+        ),
+        isPassed: readNullableBoolean(q, 'is_passed', `${path}.is_passed`),
+        teacherFeedback: readNullableString(q, 'teacher_feedback', `${path}.teacher_feedback`, {
+          allowOmitted: true,
+        }),
+        startedAt,
+        submittedAt,
+        gradedAt: readNullableString(q, 'graded_at', `${path}.graded_at`, { allowOmitted: true }),
+        eventAt,
+      };
+    }),
+    assignments: assignmentsRaw.map((a, idx) => {
+      const path = `assignments[${idx}]`;
+      if (!isPlainObject(a)) {
+        throw academicContractError(path, 'expected object');
+      }
+      const title = readRequiredString(a, 'title', `${path}.title`);
+      const titleArabic =
+        readNullableString(a, 'title_arabic', `${path}.title_arabic`, { allowOmitted: true }) ||
+        title;
+
+      return {
+        id: readRequiredString(a, 'id', `${path}.id`),
+        assignmentId: readRequiredString(a, 'assignment_id', `${path}.assignment_id`),
+        title,
+        titleArabic,
+        courseId: readNullableString(a, 'course_id', `${path}.course_id`, { allowOmitted: true }),
+        courseTitle: readNullableString(a, 'course_title', `${path}.course_title`, {
+          allowOmitted: true,
+        }),
+        courseTitleArabic: readNullableString(
+          a,
+          'course_title_arabic',
+          `${path}.course_title_arabic`,
+          { allowOmitted: true }
+        ),
+        groupId: readNullableString(a, 'group_id', `${path}.group_id`, { allowOmitted: true }),
+        groupName: readNullableString(a, 'group_name', `${path}.group_name`, {
+          allowOmitted: true,
+        }),
+        groupNameArabic: readNullableString(a, 'group_name_arabic', `${path}.group_name_arabic`, {
+          allowOmitted: true,
+        }),
+        academicYear: readNullableString(a, 'academic_year', `${path}.academic_year`, {
+          allowOmitted: true,
+        }),
+        attemptNumber: readRequiredFiniteNumber(a, 'attempt_number', `${path}.attempt_number`),
+        status: readRequiredString(a, 'status', `${path}.status`),
+        maxScore: readNullableFiniteNumber(a, 'max_score', `${path}.max_score`, {
+          allowOmitted: true,
+        }),
+        dueDate: readNullableString(a, 'due_date', `${path}.due_date`, { allowOmitted: true }),
+        submittedAt: readNullableString(a, 'submitted_at', `${path}.submitted_at`, {
+          allowOmitted: true,
+        }),
+        isLate: readRequiredBoolean(a, 'is_late', `${path}.is_late`),
+        gradedAt: readNullableString(a, 'graded_at', `${path}.graded_at`, { allowOmitted: true }),
+        isGradeReleased: readRequiredBoolean(
+          a,
+          'is_grade_released',
+          `${path}.is_grade_released`
+        ),
+        releasedAt: readNullableString(a, 'released_at', `${path}.released_at`, {
+          allowOmitted: true,
+        }),
+        score: readNullableFiniteNumber(a, 'score', `${path}.score`),
+        percentageScore: readNullableFiniteNumber(
+          a,
+          'percentage_score',
+          `${path}.percentage_score`
+        ),
+        teacherFeedback: readNullableString(a, 'teacher_feedback', `${path}.teacher_feedback`, {
+          allowOmitted: true,
+        }),
+      };
+    }),
+    attendance: attendanceRaw.map((att, idx) => {
+      const path = `attendance[${idx}]`;
+      if (!isPlainObject(att)) {
+        throw academicContractError(path, 'expected object');
+      }
+      return {
+        id: readRequiredString(att, 'id', `${path}.id`),
+        sessionId: readRequiredString(att, 'session_id', `${path}.session_id`),
+        sessionTitle: readRequiredString(att, 'session_title', `${path}.session_title`),
+        sessionTitleArabic: readNullableString(
+          att,
+          'session_title_arabic',
+          `${path}.session_title_arabic`,
+          { allowOmitted: true }
+        ),
+        courseId: readNullableString(att, 'course_id', `${path}.course_id`, { allowOmitted: true }),
+        courseTitle: readNullableString(att, 'course_title', `${path}.course_title`, {
+          allowOmitted: true,
+        }),
+        courseTitleArabic: readNullableString(
+          att,
+          'course_title_arabic',
+          `${path}.course_title_arabic`,
+          { allowOmitted: true }
+        ),
+        groupId: readNullableString(att, 'group_id', `${path}.group_id`, { allowOmitted: true }),
+        groupName: readNullableString(att, 'group_name', `${path}.group_name`, {
+          allowOmitted: true,
+        }),
+        groupNameArabic: readNullableString(
+          att,
+          'group_name_arabic',
+          `${path}.group_name_arabic`,
+          { allowOmitted: true }
+        ),
+        startTime: readRequiredString(att, 'start_time', `${path}.start_time`),
+        status: readRequiredString(att, 'status', `${path}.status`),
+        joinedAt: readNullableString(att, 'joined_at', `${path}.joined_at`, { allowOmitted: true }),
+        recordedAt: readRequiredString(att, 'recorded_at', `${path}.recorded_at`),
+        notes: readNullableString(att, 'notes', `${path}.notes`, { allowOmitted: true }),
+      };
+    }),
     attendanceSummary: {
-      present: Number(attSum.present ?? 0),
-      late: Number(attSum.late ?? 0),
-      excused: Number(attSum.excused ?? 0),
-      absent: Number(attSum.absent ?? 0),
-      total: Number(attSum.total ?? 0),
-      countableTotal: Number(attSum.countable_total ?? 0),
-      attendanceRatePct: toNumOrNull(attSum.attendance_rate_pct),
+      present: readRequiredFiniteNumber(attSum, 'present', 'attendance_summary.present'),
+      late: readRequiredFiniteNumber(attSum, 'late', 'attendance_summary.late'),
+      excused: readRequiredFiniteNumber(attSum, 'excused', 'attendance_summary.excused'),
+      absent: readRequiredFiniteNumber(attSum, 'absent', 'attendance_summary.absent'),
+      total: readRequiredFiniteNumber(attSum, 'total', 'attendance_summary.total'),
+      countableTotal: readRequiredFiniteNumber(
+        attSum,
+        'countable_total',
+        'attendance_summary.countable_total'
+      ),
+      attendanceRatePct: readNullableFiniteNumber(
+        attSum,
+        'attendance_rate_pct',
+        'attendance_summary.attendance_rate_pct'
+      ),
     },
     summary: {
-      enrolledCourses: Number(sum.enrolled_courses ?? 0),
-      totalLessons: Number(sum.total_lessons ?? 0),
-      completedLessons: Number(sum.completed_lessons ?? 0),
-      pendingLessons: Number(sum.pending_lessons ?? 0),
-      courseProgressPct: toNumOrNull(sum.course_progress_pct),
-      quizAttemptsCount: Number(sum.quiz_attempts_count ?? 0),
-      completedQuizzesCount: Number(sum.completed_quizzes_count ?? 0),
-      gradedQuizzesCount: Number(sum.graded_quizzes_count ?? 0),
-      avgQuizPercentage: toNumOrNull(sum.avg_quiz_percentage),
-      assignmentSubmissionsCount: Number(sum.assignment_submissions_count ?? 0),
-      gradedAssignmentsCount: Number(sum.graded_assignments_count ?? 0),
-      avgAssignmentPercentage: toNumOrNull(sum.avg_assignment_percentage),
-      overallAcademicAveragePct: toNumOrNull(sum.overall_academic_average_pct),
-      passingThreshold: toNumOrNull(sum.passing_threshold),
-      attendanceRatePct: toNumOrNull(sum.attendance_rate_pct),
-      lastLearningActivityAt: sum.last_learning_activity_at || null,
+      enrolledCourses: readRequiredFiniteNumber(sum, 'enrolled_courses', 'summary.enrolled_courses'),
+      totalLessons: readRequiredFiniteNumber(sum, 'total_lessons', 'summary.total_lessons'),
+      completedLessons: readRequiredFiniteNumber(
+        sum,
+        'completed_lessons',
+        'summary.completed_lessons'
+      ),
+      pendingLessons: readRequiredFiniteNumber(sum, 'pending_lessons', 'summary.pending_lessons'),
+      courseProgressPct: readNullableFiniteNumber(
+        sum,
+        'course_progress_pct',
+        'summary.course_progress_pct'
+      ),
+      quizAttemptsCount: readRequiredFiniteNumber(
+        sum,
+        'quiz_attempts_count',
+        'summary.quiz_attempts_count'
+      ),
+      completedQuizzesCount: readRequiredFiniteNumber(
+        sum,
+        'completed_quizzes_count',
+        'summary.completed_quizzes_count'
+      ),
+      gradedQuizzesCount: readRequiredFiniteNumber(
+        sum,
+        'graded_quizzes_count',
+        'summary.graded_quizzes_count'
+      ),
+      avgQuizPercentage: readNullableFiniteNumber(
+        sum,
+        'avg_quiz_percentage',
+        'summary.avg_quiz_percentage'
+      ),
+      assignmentSubmissionsCount: readRequiredFiniteNumber(
+        sum,
+        'assignment_submissions_count',
+        'summary.assignment_submissions_count'
+      ),
+      gradedAssignmentsCount: readRequiredFiniteNumber(
+        sum,
+        'graded_assignments_count',
+        'summary.graded_assignments_count'
+      ),
+      avgAssignmentPercentage: readNullableFiniteNumber(
+        sum,
+        'avg_assignment_percentage',
+        'summary.avg_assignment_percentage'
+      ),
+      overallAcademicAveragePct: readNullableFiniteNumber(
+        sum,
+        'overall_academic_average_pct',
+        'summary.overall_academic_average_pct'
+      ),
+      passingThreshold: readNullableFiniteNumber(
+        sum,
+        'passing_threshold',
+        'summary.passing_threshold',
+        { allowOmitted: true }
+      ),
+      attendanceRatePct: readNullableFiniteNumber(
+        sum,
+        'attendance_rate_pct',
+        'summary.attendance_rate_pct'
+      ),
+      lastLearningActivityAt: readNullableString(
+        sum,
+        'last_learning_activity_at',
+        'summary.last_learning_activity_at',
+        { allowOmitted: true }
+      ),
     },
-    timezone: raw?.timezone || ACADEMIC_TIMEZONE,
+    timezone,
   };
 }
 
@@ -2071,27 +2450,59 @@ export async function fetchAccessibleStudentsForRecords(): Promise<AccessibleStu
     });
   }
 
-  const rows = Array.isArray(res.data) ? res.data : [];
-  return rows.map((r: any) => ({
-    id: r.id,
-    fullName: r.full_name || '',
-    fullNameArabic: r.full_name_arabic || r.full_name || '',
-    status: r.status || null,
-    studentNumber: r.student_number || null,
-    username: r.username || null,
-    enrolledAt: r.enrolled_at || null,
-    groups: Array.isArray(r.groups)
-      ? r.groups.map((g: any) => ({
-          id: g.id,
-          name: g.name,
-          nameArabic: g.name_arabic || g.name,
-          academicYear: g.academic_year || null,
-          isActive: Boolean(g.is_active),
-          archivedAt: g.archived_at || null,
-          isPrimary: Boolean(g.is_primary),
-        }))
-      : [],
-  }));
+  if (!Array.isArray(res.data)) {
+    throw academicContractError('root', 'expected array of accessible students');
+  }
+
+  return res.data.map((r: unknown, idx: number) => {
+    const rowPath = `students[${idx}]`;
+    if (!isPlainObject(r)) {
+      throw academicContractError(rowPath, 'expected object');
+    }
+    const fullName =
+      readNullableString(r, 'full_name', `${rowPath}.full_name`, { allowOmitted: true }) ?? '';
+    const fullNameArabic =
+      readNullableString(r, 'full_name_arabic', `${rowPath}.full_name_arabic`, {
+        allowOmitted: true,
+      }) || fullName;
+    const groupsRaw = readRequiredArray(r, 'groups', `${rowPath}.groups`);
+
+    return {
+      id: readRequiredString(r, 'id', `${rowPath}.id`),
+      fullName,
+      fullNameArabic,
+      status: readNullableString(r, 'status', `${rowPath}.status`, { allowOmitted: true }),
+      studentNumber: readNullableString(r, 'student_number', `${rowPath}.student_number`, {
+        allowOmitted: true,
+      }),
+      username: readNullableString(r, 'username', `${rowPath}.username`, { allowOmitted: true }),
+      enrolledAt: readNullableString(r, 'enrolled_at', `${rowPath}.enrolled_at`, {
+        allowOmitted: true,
+      }),
+      groups: groupsRaw.map((g: unknown, gIdx: number) => {
+        const gPath = `${rowPath}.groups[${gIdx}]`;
+        if (!isPlainObject(g)) {
+          throw academicContractError(gPath, 'expected object');
+        }
+        const gName = readRequiredString(g, 'name', `${gPath}.name`);
+        return {
+          id: readRequiredString(g, 'id', `${gPath}.id`),
+          name: gName,
+          nameArabic:
+            readNullableString(g, 'name_arabic', `${gPath}.name_arabic`, { allowOmitted: true }) ||
+            gName,
+          academicYear: readNullableString(g, 'academic_year', `${gPath}.academic_year`, {
+            allowOmitted: true,
+          }),
+          isActive: readRequiredBoolean(g, 'is_active', `${gPath}.is_active`),
+          archivedAt: readNullableString(g, 'archived_at', `${gPath}.archived_at`, {
+            allowOmitted: true,
+          }),
+          isPrimary: readRequiredBoolean(g, 'is_primary', `${gPath}.is_primary`),
+        };
+      }),
+    };
+  });
 }
 
 /**

@@ -874,12 +874,76 @@ test('buildDirectStudentAcademicRecord hides unreleased assignment & quiz grades
 
 test('mapRawAcademicRecord and buildDirectStudentAcademicRecord return null for omitted metadata instead of fabricating defaults', () => {
   const mapped = mapRawAcademicRecord({
-    student: { id: 'st-omit' },
-    groups: [{ id: 'g-1', name: 'Cohort', is_active: true }],
-    courses: [{ course_id: 'c-1', title: 'Course', is_published: true }],
-    quizzes: [{ id: 'qa-1', quiz_id: 'q-1', title: 'Quiz', status: 'submitted', started_at: '2026-11-10T10:00:00Z' }],
-    assignments: [{ id: 'sub-1', assignment_id: 'a-1', title: 'Assign', is_late: false, is_grade_released: false }],
-    summary: {},
+    student: { id: 'st-omit', full_name: 'Omar' },
+    groups: [{ id: 'g-1', name: 'Cohort', is_active: true, is_primary: true }],
+    courses: [
+      {
+        course_id: 'c-1',
+        title: 'Course',
+        is_published: true,
+        groups: [{ id: 'g-1', name: 'Cohort' }],
+        total_lessons: 0,
+        completed_lessons: 0,
+        pending_lessons: 0,
+        progress_percentage: null,
+      },
+    ],
+    quizzes: [
+      {
+        id: 'qa-1',
+        quiz_id: 'q-1',
+        title: 'Quiz',
+        attempt_number: 1,
+        status: 'submitted',
+        requires_manual_grading: false,
+        is_result_released: false,
+        points_scored: null,
+        total_points_possible: null,
+        percentage_score: null,
+        is_passed: null,
+        started_at: '2026-11-10T10:00:00Z',
+      },
+    ],
+    assignments: [
+      {
+        id: 'sub-1',
+        assignment_id: 'a-1',
+        title: 'Assign',
+        attempt_number: 1,
+        status: 'submitted',
+        is_late: false,
+        is_grade_released: false,
+        score: null,
+        percentage_score: null,
+      },
+    ],
+    attendance: [],
+    attendance_summary: {
+      present: 0,
+      late: 0,
+      excused: 0,
+      absent: 0,
+      total: 0,
+      countable_total: 0,
+      attendance_rate_pct: null,
+    },
+    summary: {
+      enrolled_courses: 1,
+      total_lessons: 0,
+      completed_lessons: 0,
+      pending_lessons: 0,
+      course_progress_pct: null,
+      quiz_attempts_count: 1,
+      completed_quizzes_count: 1,
+      graded_quizzes_count: 0,
+      avg_quiz_percentage: null,
+      assignment_submissions_count: 1,
+      graded_assignments_count: 0,
+      avg_assignment_percentage: null,
+      overall_academic_average_pct: null,
+      attendance_rate_pct: null,
+    },
+    timezone: 'Asia/Riyadh',
   });
 
   assert.equal(mapped.student.enrolledAt, null);
@@ -932,4 +996,81 @@ test('mapRawAcademicRecord and buildDirectStudentAcademicRecord return null for 
   assert.equal(direct.quizzes[0].passingScore, null);
   assert.equal(direct.assignments[0].maxScore, null);
   assert.equal(direct.summary.passingThreshold, null);
+});
+
+test('mapRawAcademicRecord preserves genuine database zeros cleanly across scores, counts, and rates', () => {
+  const payload = sampleRawPayload() as any;
+  payload.courses[0].completed_lessons = 0;
+  payload.courses[0].pending_lessons = 10;
+  payload.courses[0].progress_percentage = 0;
+  payload.quizzes[0].points_scored = 0;
+  payload.quizzes[0].percentage_score = 0;
+  payload.quizzes[0].is_passed = false;
+  payload.assignments[0].score = 0;
+  payload.assignments[0].percentage_score = 0;
+  payload.assignments[0].is_grade_released = true;
+  payload.attendance_summary.present = 0;
+  payload.attendance_summary.absent = 1;
+  payload.attendance_summary.attendance_rate_pct = 0;
+  payload.summary.completed_lessons = 0;
+  payload.summary.course_progress_pct = 0;
+  payload.summary.avg_quiz_percentage = 0;
+  payload.summary.avg_assignment_percentage = 0;
+  payload.summary.overall_academic_average_pct = 0;
+  payload.summary.attendance_rate_pct = 0;
+
+  const mapped = mapRawAcademicRecord(payload);
+  assert.equal(mapped.courses[0].completedLessons, 0);
+  assert.equal(mapped.courses[0].progressPercentage, 0);
+  assert.equal(mapped.quizzes[0].pointsScored, 0);
+  assert.equal(mapped.quizzes[0].percentageScore, 0);
+  assert.equal(mapped.assignments[0].score, 0);
+  assert.equal(mapped.assignments[0].percentageScore, 0);
+  assert.equal(mapped.attendanceSummary.present, 0);
+  assert.equal(mapped.attendanceSummary.attendanceRatePct, 0);
+  assert.equal(mapped.summary.courseProgressPct, 0);
+  assert.equal(mapped.summary.avgQuizPercentage, 0);
+  assert.equal(mapped.summary.avgAssignmentPercentage, 0);
+  assert.equal(mapped.summary.overallAcademicAveragePct, 0);
+  assert.equal(mapped.summary.attendanceRatePct, 0);
+});
+
+test('mapRawAcademicRecord throws explicit ServiceError for missing required fields, NULL counts, or malformed payloads', () => {
+  assert.throws(() => mapRawAcademicRecord({}), (err: unknown) => {
+    assert.ok(err instanceof ServiceError);
+    assert.equal(err.code, 'INVALID_ACADEMIC_RECORD_CONTRACT');
+    return true;
+  });
+
+  const missingTotalLessons = sampleRawPayload() as any;
+  delete missingTotalLessons.courses[0].total_lessons;
+  assert.throws(() => mapRawAcademicRecord(missingTotalLessons), (err: unknown) => {
+    assert.ok(err instanceof ServiceError);
+    assert.equal(err.code, 'INVALID_ACADEMIC_RECORD_CONTRACT');
+    return true;
+  });
+
+  const missingAttemptNumber = sampleRawPayload() as any;
+  delete missingAttemptNumber.quizzes[0].attempt_number;
+  assert.throws(() => mapRawAcademicRecord(missingAttemptNumber), (err: unknown) => {
+    assert.ok(err instanceof ServiceError);
+    assert.equal(err.code, 'INVALID_ACADEMIC_RECORD_CONTRACT');
+    return true;
+  });
+
+  const nullAttendanceCount = sampleRawPayload() as any;
+  nullAttendanceCount.attendance_summary.present = null;
+  assert.throws(() => mapRawAcademicRecord(nullAttendanceCount), (err: unknown) => {
+    assert.ok(err instanceof ServiceError);
+    assert.equal(err.code, 'INVALID_ACADEMIC_RECORD_CONTRACT');
+    return true;
+  });
+
+  const malformedAvgScore = sampleRawPayload() as any;
+  malformedAvgScore.summary.avg_quiz_percentage = 'not-a-number';
+  assert.throws(() => mapRawAcademicRecord(malformedAvgScore), (err: unknown) => {
+    assert.ok(err instanceof ServiceError);
+    assert.equal(err.code, 'INVALID_ACADEMIC_RECORD_CONTRACT');
+    return true;
+  });
 });

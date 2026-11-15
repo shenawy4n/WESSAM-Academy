@@ -1022,7 +1022,9 @@ export const AcademicRecordDetailPanel: React.FC<AcademicRecordDetailPanelProps>
                       <td className="p-2 font-medium">{isRtl ? e.titleArabic : e.title}</td>
                       <td className="p-2">{renderEntryTypeLabel(e.entryType)}</td>
                       <td className="p-2 tabular-nums">
-                        {e.percentageScore !== null ? `${e.percentageScore}% (${e.rawScoreDisplay || ''})` : '—'}
+                        {e.percentageScore !== null
+                          ? `${e.percentageScore}%${e.rawScoreDisplay ? ` (${e.rawScoreDisplay})` : ''}`
+                          : '—'}
                       </td>
                       <td className="p-2 tabular-nums">{formatRecordTimestampRiyadh(e.eventAt, lang)}</td>
                     </tr>

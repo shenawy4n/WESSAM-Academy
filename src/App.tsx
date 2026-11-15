@@ -3,41 +3,140 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { LocaleProvider, useLocale } from './hooks/useLocale';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { isSupabaseConfigured } from './lib/supabase/client';
 import { ConfigErrorScreen } from './features/auth/ConfigErrorScreen';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { UnauthorizedScreen } from './features/auth/UnauthorizedScreen';
-import { AppLayout } from './components/layout/AppLayout';
-import { TeacherDashboard } from './features/dashboard/TeacherDashboard';
-import { StudentDashboard } from './features/dashboard/StudentDashboard';
-import { StudentManagementView } from './features/students/StudentManagementView';
-import { GroupManagementView } from './features/groups/GroupManagementView';
-import { CoursesManagementView } from './features/courses/CoursesManagementView';
-import { StudentCoursesView } from './features/courses/StudentCoursesView';
-import { LiveSessionsManagementView } from './features/liveSessions/LiveSessionsManagementView';
-import { AttendanceReportsView } from './features/liveSessions/AttendanceReportsView';
-import { StudentLiveSessionsView } from './features/liveSessions/StudentLiveSessionsView';
-import { QuizManagementView } from './features/quizzes/QuizManagementView';
-import { StudentAssessmentsView } from './features/quizzes/StudentAssessmentsView';
-import { AnnouncementManagementView } from './features/notifications/AnnouncementManagementView';
-import { NotificationCenterView } from './features/notifications/NotificationCenterView';
-import { TeacherVideoLibraryView } from './features/videoLibrary/TeacherVideoLibraryView';
-import { StudentVideoLibraryView } from './features/videoLibrary/StudentVideoLibraryView';
-import { QuestionBankView } from './features/questionBank/QuestionBankView';
-import { TeacherAssignmentsView } from './features/assignments/TeacherAssignmentsView';
-import { StudentAssignmentsView } from './features/assignments/StudentAssignmentsView';
-import { MessagingWorkspace } from './features/messaging/MessagingWorkspace';
 import { parseMessageActionUrl } from './features/messaging/messageValidation';
-import { AcademicRecordsView } from './features/academicRecords/AcademicRecordsView';
-import { StudentResultsView } from './features/academicRecords/StudentResultsView';
-import { PerformanceAnalyticsView } from './features/analytics/PerformanceAnalyticsView';
-import { SystemSettingsView } from './features/settings/SystemSettingsView';
-import { StudentProfileView } from './features/auth/StudentProfileView';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { TeacherView, StudentView } from './types/navigation';
+
+const AppLayout = lazy(() =>
+  import('./components/layout/AppLayout').then((m) => ({ default: m.AppLayout }))
+);
+const TeacherDashboard = lazy(() =>
+  import('./features/dashboard/TeacherDashboard').then((m) => ({ default: m.TeacherDashboard }))
+);
+const StudentDashboard = lazy(() =>
+  import('./features/dashboard/StudentDashboard').then((m) => ({ default: m.StudentDashboard }))
+);
+const StudentManagementView = lazy(() =>
+  import('./features/students/StudentManagementView').then((m) => ({
+    default: m.StudentManagementView,
+  }))
+);
+const GroupManagementView = lazy(() =>
+  import('./features/groups/GroupManagementView').then((m) => ({ default: m.GroupManagementView }))
+);
+const CoursesManagementView = lazy(() =>
+  import('./features/courses/CoursesManagementView').then((m) => ({
+    default: m.CoursesManagementView,
+  }))
+);
+const StudentCoursesView = lazy(() =>
+  import('./features/courses/StudentCoursesView').then((m) => ({ default: m.StudentCoursesView }))
+);
+const LiveSessionsManagementView = lazy(() =>
+  import('./features/liveSessions/LiveSessionsManagementView').then((m) => ({
+    default: m.LiveSessionsManagementView,
+  }))
+);
+const AttendanceReportsView = lazy(() =>
+  import('./features/liveSessions/AttendanceReportsView').then((m) => ({
+    default: m.AttendanceReportsView,
+  }))
+);
+const StudentLiveSessionsView = lazy(() =>
+  import('./features/liveSessions/StudentLiveSessionsView').then((m) => ({
+    default: m.StudentLiveSessionsView,
+  }))
+);
+const QuizManagementView = lazy(() =>
+  import('./features/quizzes/QuizManagementView').then((m) => ({ default: m.QuizManagementView }))
+);
+const StudentAssessmentsView = lazy(() =>
+  import('./features/quizzes/StudentAssessmentsView').then((m) => ({
+    default: m.StudentAssessmentsView,
+  }))
+);
+const AnnouncementManagementView = lazy(() =>
+  import('./features/notifications/AnnouncementManagementView').then((m) => ({
+    default: m.AnnouncementManagementView,
+  }))
+);
+const NotificationCenterView = lazy(() =>
+  import('./features/notifications/NotificationCenterView').then((m) => ({
+    default: m.NotificationCenterView,
+  }))
+);
+const TeacherVideoLibraryView = lazy(() =>
+  import('./features/videoLibrary/TeacherVideoLibraryView').then((m) => ({
+    default: m.TeacherVideoLibraryView,
+  }))
+);
+const StudentVideoLibraryView = lazy(() =>
+  import('./features/videoLibrary/StudentVideoLibraryView').then((m) => ({
+    default: m.StudentVideoLibraryView,
+  }))
+);
+const QuestionBankView = lazy(() =>
+  import('./features/questionBank/QuestionBankView').then((m) => ({ default: m.QuestionBankView }))
+);
+const TeacherAssignmentsView = lazy(() =>
+  import('./features/assignments/TeacherAssignmentsView').then((m) => ({
+    default: m.TeacherAssignmentsView,
+  }))
+);
+const StudentAssignmentsView = lazy(() =>
+  import('./features/assignments/StudentAssignmentsView').then((m) => ({
+    default: m.StudentAssignmentsView,
+  }))
+);
+const MessagingWorkspace = lazy(() =>
+  import('./features/messaging/MessagingWorkspace').then((m) => ({
+    default: m.MessagingWorkspace,
+  }))
+);
+const AcademicRecordsView = lazy(() =>
+  import('./features/academicRecords/AcademicRecordsView').then((m) => ({
+    default: m.AcademicRecordsView,
+  }))
+);
+const StudentResultsView = lazy(() =>
+  import('./features/academicRecords/StudentResultsView').then((m) => ({
+    default: m.StudentResultsView,
+  }))
+);
+const PerformanceAnalyticsView = lazy(() =>
+  import('./features/analytics/PerformanceAnalyticsView').then((m) => ({
+    default: m.PerformanceAnalyticsView,
+  }))
+);
+const SystemSettingsView = lazy(() =>
+  import('./features/settings/SystemSettingsView').then((m) => ({ default: m.SystemSettingsView }))
+);
+const StudentProfileView = lazy(() =>
+  import('./features/auth/StudentProfileView').then((m) => ({ default: m.StudentProfileView }))
+);
+
+function FullScreenLoadingFallback({ label }: { label: string }) {
+  return (
+    <div className="min-h-screen bg-[#F4F6FA] flex flex-col items-center justify-center p-6 text-center">
+      <LoadingSpinner size="lg" label={label} />
+    </div>
+  );
+}
+
+function ViewLoadingFallback({ label }: { label: string }) {
+  return (
+    <div className="min-h-[360px] flex flex-col items-center justify-center p-6 text-center">
+      <LoadingSpinner size="md" label={label} />
+    </div>
+  );
+}
 
 function AppContent() {
   const { t, isRtl } = useLocale();
@@ -57,11 +156,7 @@ function AppContent() {
 
   // Prevent flicker or momentary display of unauthenticated screens while session resolves
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F4F6FA] flex flex-col items-center justify-center p-6 text-center">
-        <LoadingSpinner size="lg" label={t.common.loading} />
-      </div>
-    );
+    return <FullScreenLoadingFallback label={t.common.loading} />;
   }
 
   // If user is not authenticated yet
@@ -238,14 +333,18 @@ function AppContent() {
     };
 
     return (
-      <AppLayout
-        currentView={currentTeacherView}
-        onSelectView={(v) => setCurrentTeacherView(v as TeacherView)}
-        pageTitle={getPageTitle(currentTeacherView)}
-        onNavigateToResource={handleTeacherNavigateToResource}
-      >
-        {renderTeacherView()}
-      </AppLayout>
+      <Suspense fallback={<FullScreenLoadingFallback label={t.common.loading} />}>
+        <AppLayout
+          currentView={currentTeacherView}
+          onSelectView={(v) => setCurrentTeacherView(v as TeacherView)}
+          pageTitle={getPageTitle(currentTeacherView)}
+          onNavigateToResource={handleTeacherNavigateToResource}
+        >
+          <Suspense fallback={<ViewLoadingFallback label={t.common.loading} />}>
+            {renderTeacherView()}
+          </Suspense>
+        </AppLayout>
+      </Suspense>
     );
   }
 
@@ -342,14 +441,18 @@ function AppContent() {
     };
 
     return (
-      <AppLayout
-        currentView={currentStudentView}
-        onSelectView={(v) => setCurrentStudentView(v as StudentView)}
-        pageTitle={getPageTitle(currentStudentView)}
-        onNavigateToResource={handleStudentNavigateToResource}
-      >
-        {renderStudentView()}
-      </AppLayout>
+      <Suspense fallback={<FullScreenLoadingFallback label={t.common.loading} />}>
+        <AppLayout
+          currentView={currentStudentView}
+          onSelectView={(v) => setCurrentStudentView(v as StudentView)}
+          pageTitle={getPageTitle(currentStudentView)}
+          onNavigateToResource={handleStudentNavigateToResource}
+        >
+          <Suspense fallback={<ViewLoadingFallback label={t.common.loading} />}>
+            {renderStudentView()}
+          </Suspense>
+        </AppLayout>
+      </Suspense>
     );
   }
 

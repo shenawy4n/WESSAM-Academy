@@ -110,8 +110,8 @@ export interface AnalyticsDashboardData {
     isSuperAdmin: boolean;
     dateFrom: string | null;
     dateTo: string | null;
-    attentionScoreThreshold: number;
-    attentionAttendanceThreshold: number;
+    attentionScoreThreshold: number | null;
+    attentionAttendanceThreshold: number | null;
     timezone: string;
   };
   kpis: AnalyticsKPIs;
@@ -136,10 +136,132 @@ export interface AnalyticsDashboardData {
   };
 }
 
-function toNumOrNull(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+const CONTRACT_OPERATION = 'mapAnalyticsDashboard';
+
+function contractError(path: string, reason: string): ServiceError {
+  return new ServiceError({
+    category: 'DATABASE_ERROR',
+    code: 'INVALID_ANALYTICS_CONTRACT',
+    message: `Invalid analytics response at "${path}": ${reason}`,
+    service: SERVICE,
+    operation: CONTRACT_OPERATION,
+  });
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return Boolean(v && typeof v === 'object' && !Array.isArray(v));
+}
+
+function hasOwn(obj: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function readRequiredObject(
+  parent: Record<string, unknown>,
+  key: string,
+  path: string
+): Record<string, unknown> {
+  if (!hasOwn(parent, key) || !isPlainObject(parent[key])) {
+    throw contractError(path, 'expected non-null object');
+  }
+  return parent[key] as Record<string, unknown>;
+}
+
+function readRequiredArray(
+  parent: Record<string, unknown>,
+  key: string,
+  path: string
+): unknown[] {
+  if (!hasOwn(parent, key) || !Array.isArray(parent[key])) {
+    throw contractError(path, 'expected array');
+  }
+  return parent[key] as unknown[];
+}
+
+function parseFiniteNumberValue(val: unknown, path: string): number {
+  if (typeof val === 'boolean' || (typeof val === 'string' && val.trim() === '')) {
+    throw contractError(path, 'expected finite number');
+  }
+  if (typeof val !== 'number' && typeof val !== 'string') {
+    throw contractError(path, 'expected finite number');
+  }
+  const n = Number(val);
+  if (!Number.isFinite(n)) {
+    throw contractError(path, 'expected finite number');
+  }
+  return n;
+}
+
+function readRequiredFiniteNumber(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string
+): number {
+  if (!hasOwn(obj, key) || obj[key] === undefined) {
+    throw contractError(path, 'missing required numeric field');
+  }
+  if (obj[key] === null) {
+    throw contractError(path, 'required numeric field cannot be null');
+  }
+  return parseFiniteNumberValue(obj[key], path);
+}
+
+function readNullableFiniteNumber(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string,
+  options: { allowOmitted?: boolean } = {}
+): number | null {
+  if (!hasOwn(obj, key) || obj[key] === undefined) {
+    if (options.allowOmitted) return null;
+    throw contractError(path, 'missing nullable numeric field');
+  }
+  if (obj[key] === null) {
+    return null;
+  }
+  return parseFiniteNumberValue(obj[key], path);
+}
+
+function readRequiredBoolean(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string
+): boolean {
+  if (!hasOwn(obj, key) || typeof obj[key] !== 'boolean') {
+    throw contractError(path, 'expected boolean');
+  }
+  return obj[key] as boolean;
+}
+
+function readRequiredString(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string
+): string {
+  if (!hasOwn(obj, key) || typeof obj[key] !== 'string' || obj[key].trim() === '') {
+    throw contractError(path, 'expected non-empty string');
+  }
+  return obj[key] as string;
+}
+
+function readNullableString(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string,
+  options: { allowOmitted?: boolean } = {}
+): string | null {
+  if (!hasOwn(obj, key) || obj[key] === undefined) {
+    if (options.allowOmitted) return null;
+    throw contractError(path, 'missing nullable string field');
+  }
+  if (obj[key] === null) {
+    return null;
+  }
+  if (typeof obj[key] !== 'string') {
+    throw contractError(path, 'expected string or null');
+  }
+  const str = obj[key] as string;
+  return str.trim() === '' ? null : str;
 }
 
 /**
@@ -199,130 +321,249 @@ export function resolveRiyadhDateRange(
   }
 }
 
-export function mapAnalyticsDashboard(raw: any): AnalyticsDashboardData {
-  const scope = raw?.scope || {};
-  const k = raw?.kpis || {};
-  const sa = raw?.student_analytics || {};
-  const aa = raw?.attendance_analytics || {};
-  const br = aa?.breakdown || {};
+export function mapAnalyticsDashboard(raw: unknown): AnalyticsDashboardData {
+  if (!isPlainObject(raw)) {
+    throw contractError('root', 'expected non-null analytics payload object');
+  }
+
+  const scope = readRequiredObject(raw, 'scope', 'scope');
+  const k = readRequiredObject(raw, 'kpis', 'kpis');
+  const sa = readRequiredObject(raw, 'student_analytics', 'student_analytics');
+  const groupAnalyticsRaw = readRequiredArray(raw, 'group_analytics', 'group_analytics');
+  const courseAnalyticsRaw = readRequiredArray(raw, 'course_analytics', 'course_analytics');
+  const aa = readRequiredObject(raw, 'attendance_analytics', 'attendance_analytics');
+  const br = readRequiredObject(aa, 'breakdown', 'attendance_analytics.breakdown');
+
+  const scoreDistRaw = readRequiredArray(sa, 'score_distribution', 'student_analytics.score_distribution');
+  const topPerformersRaw = readRequiredArray(sa, 'top_performers', 'student_analytics.top_performers');
+  const attentionNeededRaw = readRequiredArray(sa, 'attention_needed', 'student_analytics.attention_needed');
+  const trendSeriesRaw = readRequiredArray(aa, 'trend_series', 'attendance_analytics.trend_series');
+  const recentSessionsRaw = readRequiredArray(aa, 'recent_sessions', 'attendance_analytics.recent_sessions');
 
   return {
     scope: {
-      isSuperAdmin: Boolean(scope.is_super_admin),
-      dateFrom: scope.date_from || null,
-      dateTo: scope.date_to || null,
-      attentionScoreThreshold: Number(scope.attention_score_threshold ?? 60),
-      attentionAttendanceThreshold: Number(scope.attention_attendance_threshold ?? 75),
-      timezone: scope.timezone || ACADEMIC_TIMEZONE,
+      isSuperAdmin: readRequiredBoolean(scope, 'is_super_admin', 'scope.is_super_admin'),
+      dateFrom: readNullableString(scope, 'date_from', 'scope.date_from', { allowOmitted: true }),
+      dateTo: readNullableString(scope, 'date_to', 'scope.date_to', { allowOmitted: true }),
+      attentionScoreThreshold: readNullableFiniteNumber(
+        scope,
+        'attention_score_threshold',
+        'scope.attention_score_threshold'
+      ),
+      attentionAttendanceThreshold: readNullableFiniteNumber(
+        scope,
+        'attention_attendance_threshold',
+        'scope.attention_attendance_threshold'
+      ),
+      timezone: readRequiredString(scope, 'timezone', 'scope.timezone'),
     },
     kpis: {
-      activeStudentsCount: Number(k.active_students_count ?? 0),
-      totalStudentsCount: Number(k.total_students_count ?? 0),
-      activeGroupsCount: Number(k.active_groups_count ?? 0),
-      publishedCoursesCount: Number(k.published_courses_count ?? 0),
-      activeTeachersCount: toNumOrNull(k.active_teachers_count),
-      liveSessionsCount: Number(k.live_sessions_count ?? 0),
-      attendanceRatePct: toNumOrNull(k.attendance_rate_pct),
-      attendanceRecordsCount: Number(k.attendance_records_count ?? 0),
-      avgQuizScorePct: toNumOrNull(k.avg_quiz_score_pct),
-      gradedQuizAttemptsCount: Number(k.graded_quiz_attempts_count ?? 0),
-      assignmentCompletionRatePct: toNumOrNull(k.assignment_completion_rate_pct),
-      expectedAssignmentPairsCount: Number(k.expected_assignment_pairs_count ?? 0),
-      submittedAssignmentPairsCount: Number(k.submitted_assignment_pairs_count ?? 0),
-      avgCourseProgressPct: toNumOrNull(k.avg_course_progress_pct),
-      expectedLessonCompletionsCount: Number(k.expected_lesson_completions_count ?? 0),
-      completedLessonCompletionsCount: Number(k.completed_lesson_completions_count ?? 0),
+      activeStudentsCount: readRequiredFiniteNumber(k, 'active_students_count', 'kpis.active_students_count'),
+      totalStudentsCount: readRequiredFiniteNumber(k, 'total_students_count', 'kpis.total_students_count'),
+      activeGroupsCount: readRequiredFiniteNumber(k, 'active_groups_count', 'kpis.active_groups_count'),
+      publishedCoursesCount: readRequiredFiniteNumber(k, 'published_courses_count', 'kpis.published_courses_count'),
+      activeTeachersCount: readNullableFiniteNumber(k, 'active_teachers_count', 'kpis.active_teachers_count'),
+      liveSessionsCount: readRequiredFiniteNumber(k, 'live_sessions_count', 'kpis.live_sessions_count'),
+      attendanceRatePct: readNullableFiniteNumber(k, 'attendance_rate_pct', 'kpis.attendance_rate_pct'),
+      attendanceRecordsCount: readRequiredFiniteNumber(
+        k,
+        'attendance_records_count',
+        'kpis.attendance_records_count'
+      ),
+      avgQuizScorePct: readNullableFiniteNumber(k, 'avg_quiz_score_pct', 'kpis.avg_quiz_score_pct'),
+      gradedQuizAttemptsCount: readRequiredFiniteNumber(
+        k,
+        'graded_quiz_attempts_count',
+        'kpis.graded_quiz_attempts_count'
+      ),
+      assignmentCompletionRatePct: readNullableFiniteNumber(
+        k,
+        'assignment_completion_rate_pct',
+        'kpis.assignment_completion_rate_pct'
+      ),
+      expectedAssignmentPairsCount: readRequiredFiniteNumber(
+        k,
+        'expected_assignment_pairs_count',
+        'kpis.expected_assignment_pairs_count'
+      ),
+      submittedAssignmentPairsCount: readRequiredFiniteNumber(
+        k,
+        'submitted_assignment_pairs_count',
+        'kpis.submitted_assignment_pairs_count'
+      ),
+      avgCourseProgressPct: readNullableFiniteNumber(k, 'avg_course_progress_pct', 'kpis.avg_course_progress_pct'),
+      expectedLessonCompletionsCount: readRequiredFiniteNumber(
+        k,
+        'expected_lesson_completions_count',
+        'kpis.expected_lesson_completions_count'
+      ),
+      completedLessonCompletionsCount: readRequiredFiniteNumber(
+        k,
+        'completed_lesson_completions_count',
+        'kpis.completed_lesson_completions_count'
+      ),
     },
     studentAnalytics: {
-      scoreDistribution: Array.isArray(sa.score_distribution)
-        ? sa.score_distribution.map((b: any) => ({
-            band: String(b.band),
-            count: Number(b.count ?? 0),
-          }))
-        : [],
-      topPerformers: Array.isArray(sa.top_performers)
-        ? sa.top_performers.map((st: any) => ({
-            studentId: st.student_id,
-            fullName: st.full_name,
-            fullNameArabic: st.full_name_arabic || st.full_name,
-            combinedScorePct: toNumOrNull(st.combined_score_pct),
-            avgQuizPct: toNumOrNull(st.avg_quiz_pct),
-            avgAssignPct: toNumOrNull(st.avg_assign_pct),
-            attendanceRatePct: toNumOrNull(st.attendance_rate_pct),
-          }))
-        : [],
-      attentionNeeded: Array.isArray(sa.attention_needed)
-        ? sa.attention_needed.map((st: any) => ({
-            studentId: st.student_id,
-            fullName: st.full_name,
-            fullNameArabic: st.full_name_arabic || st.full_name,
-            combinedScorePct: toNumOrNull(st.combined_score_pct),
-            avgQuizPct: toNumOrNull(st.avg_quiz_pct),
-            avgAssignPct: toNumOrNull(st.avg_assign_pct),
-            attendanceRatePct: toNumOrNull(st.attendance_rate_pct),
-            lowAcademic: Boolean(st.low_academic),
-            lowAttendance: Boolean(st.low_attendance),
-          }))
-        : [],
+      scoreDistribution: scoreDistRaw.map((b, idx) => {
+        if (!isPlainObject(b)) {
+          throw contractError(`student_analytics.score_distribution[${idx}]`, 'expected object');
+        }
+        return {
+          band: readRequiredString(b, 'band', `student_analytics.score_distribution[${idx}].band`),
+          count: readRequiredFiniteNumber(b, 'count', `student_analytics.score_distribution[${idx}].count`),
+        };
+      }),
+      topPerformers: topPerformersRaw.map((st, idx) => {
+        if (!isPlainObject(st)) {
+          throw contractError(`student_analytics.top_performers[${idx}]`, 'expected object');
+        }
+        const path = `student_analytics.top_performers[${idx}]`;
+        const fullName = readRequiredString(st, 'full_name', `${path}.full_name`);
+        const fullNameArabic = readNullableString(st, 'full_name_arabic', `${path}.full_name_arabic`, {
+          allowOmitted: true,
+        });
+        return {
+          studentId: readRequiredString(st, 'student_id', `${path}.student_id`),
+          fullName,
+          fullNameArabic: fullNameArabic || fullName,
+          combinedScorePct: readNullableFiniteNumber(st, 'combined_score_pct', `${path}.combined_score_pct`),
+          avgQuizPct: readNullableFiniteNumber(st, 'avg_quiz_pct', `${path}.avg_quiz_pct`),
+          avgAssignPct: readNullableFiniteNumber(st, 'avg_assign_pct', `${path}.avg_assign_pct`),
+          attendanceRatePct: readNullableFiniteNumber(st, 'attendance_rate_pct', `${path}.attendance_rate_pct`),
+        };
+      }),
+      attentionNeeded: attentionNeededRaw.map((st, idx) => {
+        if (!isPlainObject(st)) {
+          throw contractError(`student_analytics.attention_needed[${idx}]`, 'expected object');
+        }
+        const path = `student_analytics.attention_needed[${idx}]`;
+        const fullName = readRequiredString(st, 'full_name', `${path}.full_name`);
+        const fullNameArabic = readNullableString(st, 'full_name_arabic', `${path}.full_name_arabic`, {
+          allowOmitted: true,
+        });
+        return {
+          studentId: readRequiredString(st, 'student_id', `${path}.student_id`),
+          fullName,
+          fullNameArabic: fullNameArabic || fullName,
+          combinedScorePct: readNullableFiniteNumber(st, 'combined_score_pct', `${path}.combined_score_pct`),
+          avgQuizPct: readNullableFiniteNumber(st, 'avg_quiz_pct', `${path}.avg_quiz_pct`),
+          avgAssignPct: readNullableFiniteNumber(st, 'avg_assign_pct', `${path}.avg_assign_pct`),
+          attendanceRatePct: readNullableFiniteNumber(st, 'attendance_rate_pct', `${path}.attendance_rate_pct`),
+          lowAcademic: readRequiredBoolean(st, 'low_academic', `${path}.low_academic`),
+          lowAttendance: readRequiredBoolean(st, 'low_attendance', `${path}.low_attendance`),
+        };
+      }),
     },
-    groupAnalytics: Array.isArray(raw?.group_analytics)
-      ? raw.group_analytics.map((g: any) => ({
-          groupId: g.group_id,
-          name: g.name,
-          nameArabic: g.name_arabic || g.name,
-          academicYear: g.academic_year || null,
-          isActive: Boolean(g.is_active),
-          activeStudentsCount: Number(g.active_students_count ?? 0),
-          attendanceRatePct: toNumOrNull(g.attendance_rate_pct),
-          avgQuizScorePct: toNumOrNull(g.avg_quiz_score_pct),
-          avgCourseProgressPct: toNumOrNull(g.avg_course_progress_pct),
-        }))
-      : [],
-    courseAnalytics: Array.isArray(raw?.course_analytics)
-      ? raw.course_analytics.map((c: any) => ({
-          courseId: c.course_id,
-          title: c.title,
-          titleArabic: c.title_arabic || c.title,
-          level: c.level || null,
-          isPublished: Boolean(c.is_published),
-          publishedLessonsCount: Number(c.published_lessons_count ?? 0),
-          enrolledStudentsCount: Number(c.enrolled_students_count ?? 0),
-          avgCompletionPct: toNumOrNull(c.avg_completion_pct),
-          avgQuizScorePct: toNumOrNull(c.avg_quiz_score_pct),
-          publishedAssignmentsCount: Number(c.published_assignments_count ?? 0),
-        }))
-      : [],
+    groupAnalytics: groupAnalyticsRaw.map((g, idx) => {
+      if (!isPlainObject(g)) {
+        throw contractError(`group_analytics[${idx}]`, 'expected object');
+      }
+      const path = `group_analytics[${idx}]`;
+      const name = readRequiredString(g, 'name', `${path}.name`);
+      const nameArabic = readNullableString(g, 'name_arabic', `${path}.name_arabic`, {
+        allowOmitted: true,
+      });
+      return {
+        groupId: readRequiredString(g, 'group_id', `${path}.group_id`),
+        name,
+        nameArabic: nameArabic || name,
+        academicYear: readNullableString(g, 'academic_year', `${path}.academic_year`, { allowOmitted: true }),
+        isActive: readRequiredBoolean(g, 'is_active', `${path}.is_active`),
+        activeStudentsCount: readRequiredFiniteNumber(
+          g,
+          'active_students_count',
+          `${path}.active_students_count`
+        ),
+        attendanceRatePct: readNullableFiniteNumber(g, 'attendance_rate_pct', `${path}.attendance_rate_pct`),
+        avgQuizScorePct: readNullableFiniteNumber(g, 'avg_quiz_score_pct', `${path}.avg_quiz_score_pct`),
+        avgCourseProgressPct: readNullableFiniteNumber(
+          g,
+          'avg_course_progress_pct',
+          `${path}.avg_course_progress_pct`
+        ),
+      };
+    }),
+    courseAnalytics: courseAnalyticsRaw.map((c, idx) => {
+      if (!isPlainObject(c)) {
+        throw contractError(`course_analytics[${idx}]`, 'expected object');
+      }
+      const path = `course_analytics[${idx}]`;
+      const title = readRequiredString(c, 'title', `${path}.title`);
+      const titleArabic = readNullableString(c, 'title_arabic', `${path}.title_arabic`, {
+        allowOmitted: true,
+      });
+      return {
+        courseId: readRequiredString(c, 'course_id', `${path}.course_id`),
+        title,
+        titleArabic: titleArabic || title,
+        level: readNullableString(c, 'level', `${path}.level`, { allowOmitted: true }),
+        isPublished: readRequiredBoolean(c, 'is_published', `${path}.is_published`),
+        publishedLessonsCount: readRequiredFiniteNumber(
+          c,
+          'published_lessons_count',
+          `${path}.published_lessons_count`
+        ),
+        enrolledStudentsCount: readRequiredFiniteNumber(
+          c,
+          'enrolled_students_count',
+          `${path}.enrolled_students_count`
+        ),
+        avgCompletionPct: readNullableFiniteNumber(c, 'avg_completion_pct', `${path}.avg_completion_pct`),
+        avgQuizScorePct: readNullableFiniteNumber(c, 'avg_quiz_score_pct', `${path}.avg_quiz_score_pct`),
+        publishedAssignmentsCount: readRequiredFiniteNumber(
+          c,
+          'published_assignments_count',
+          `${path}.published_assignments_count`
+        ),
+      };
+    }),
     attendanceAnalytics: {
       breakdown: {
-        present: Number(br.present ?? 0),
-        late: Number(br.late ?? 0),
-        excused: Number(br.excused ?? 0),
-        absent: Number(br.absent ?? 0),
-        totalRecords: Number(br.total_records ?? 0),
-        countableRecords: Number(br.countable_records ?? 0),
+        present: readRequiredFiniteNumber(br, 'present', 'attendance_analytics.breakdown.present'),
+        late: readRequiredFiniteNumber(br, 'late', 'attendance_analytics.breakdown.late'),
+        excused: readRequiredFiniteNumber(br, 'excused', 'attendance_analytics.breakdown.excused'),
+        absent: readRequiredFiniteNumber(br, 'absent', 'attendance_analytics.breakdown.absent'),
+        totalRecords: readRequiredFiniteNumber(
+          br,
+          'total_records',
+          'attendance_analytics.breakdown.total_records'
+        ),
+        countableRecords: readRequiredFiniteNumber(
+          br,
+          'countable_records',
+          'attendance_analytics.breakdown.countable_records'
+        ),
       },
-      trendSeries: Array.isArray(aa.trend_series)
-        ? aa.trend_series.map((p: any) => ({
-            riyadhDate: p.riyadh_date,
-            present: Number(p.present ?? 0),
-            late: Number(p.late ?? 0),
-            excused: Number(p.excused ?? 0),
-            absent: Number(p.absent ?? 0),
-            attendanceRatePct: toNumOrNull(p.attendance_rate_pct),
-          }))
-        : [],
-      recentSessions: Array.isArray(aa.recent_sessions)
-        ? aa.recent_sessions.map((s: any) => ({
-            sessionId: s.session_id,
-            title: s.title,
-            titleArabic: s.title_arabic || null,
-            startTime: s.start_time,
-            present: Number(s.present ?? 0),
-            late: Number(s.late ?? 0),
-            excused: Number(s.excused ?? 0),
-            absent: Number(s.absent ?? 0),
-          }))
-        : [],
+      trendSeries: trendSeriesRaw.map((p, idx) => {
+        if (!isPlainObject(p)) {
+          throw contractError(`attendance_analytics.trend_series[${idx}]`, 'expected object');
+        }
+        const path = `attendance_analytics.trend_series[${idx}]`;
+        return {
+          riyadhDate: readRequiredString(p, 'riyadh_date', `${path}.riyadh_date`),
+          present: readRequiredFiniteNumber(p, 'present', `${path}.present`),
+          late: readRequiredFiniteNumber(p, 'late', `${path}.late`),
+          excused: readRequiredFiniteNumber(p, 'excused', `${path}.excused`),
+          absent: readRequiredFiniteNumber(p, 'absent', `${path}.absent`),
+          attendanceRatePct: readNullableFiniteNumber(p, 'attendance_rate_pct', `${path}.attendance_rate_pct`),
+        };
+      }),
+      recentSessions: recentSessionsRaw.map((s, idx) => {
+        if (!isPlainObject(s)) {
+          throw contractError(`attendance_analytics.recent_sessions[${idx}]`, 'expected object');
+        }
+        const path = `attendance_analytics.recent_sessions[${idx}]`;
+        return {
+          sessionId: readRequiredString(s, 'session_id', `${path}.session_id`),
+          title: readRequiredString(s, 'title', `${path}.title`),
+          titleArabic: readNullableString(s, 'title_arabic', `${path}.title_arabic`, { allowOmitted: true }),
+          startTime: readRequiredString(s, 'start_time', `${path}.start_time`),
+          present: readRequiredFiniteNumber(s, 'present', `${path}.present`),
+          late: readRequiredFiniteNumber(s, 'late', `${path}.late`),
+          excused: readRequiredFiniteNumber(s, 'excused', `${path}.excused`),
+          absent: readRequiredFiniteNumber(s, 'absent', `${path}.absent`),
+        };
+      }),
     },
   };
 }

@@ -429,9 +429,21 @@ export const PerformanceAnalyticsView: React.FC<PerformanceAnalyticsViewProps> =
             {data.studentAnalytics.attentionNeeded.length} {isRtl ? 'طالب بحاجة لمتابعة' : 'students flagged'}
           </div>
           <div className="text-[11px] text-slate-500 mt-1 tabular-nums">
-            {isRtl
-              ? `الحد المعتمد من إعدادات النظام: الأداء < ${data.scope.attentionScoreThreshold}% أو الحضور < ${data.scope.attentionAttendanceThreshold}%`
-              : `Configured threshold: score < ${data.scope.attentionScoreThreshold}% or attendance < ${data.scope.attentionAttendanceThreshold}%`}
+            {data.scope.attentionScoreThreshold !== null || data.scope.attentionAttendanceThreshold !== null
+              ? isRtl
+                ? `الحد المعتمد من إعدادات النظام: الأداء < ${
+                    data.scope.attentionScoreThreshold !== null ? `${data.scope.attentionScoreThreshold}%` : 'غير محدد'
+                  } أو الحضور < ${
+                    data.scope.attentionAttendanceThreshold !== null ? `${data.scope.attentionAttendanceThreshold}%` : 'غير محدد'
+                  }`
+                : `Configured threshold: score < ${
+                    data.scope.attentionScoreThreshold !== null ? `${data.scope.attentionScoreThreshold}%` : 'N/A'
+                  } or attendance < ${
+                    data.scope.attentionAttendanceThreshold !== null ? `${data.scope.attentionAttendanceThreshold}%` : 'N/A'
+                  }`
+              : isRtl
+              ? 'الحدود المعتمدة غير محددة في إعدادات النظام'
+              : 'Thresholds unavailable'}
           </div>
         </div>
       </div>
@@ -514,14 +526,17 @@ export const PerformanceAnalyticsView: React.FC<PerformanceAnalyticsViewProps> =
                           {isRtl ? st.fullNameArabic : st.fullName}
                         </div>
                         <div className="text-[11px] text-slate-500 tabular-nums">
-                          {isRtl ? 'اختبارات:' : 'Quizzes:'} {st.avgQuizPct ?? '—'}% ·{' '}
-                          {isRtl ? 'واجبات:' : 'Assign:'} {st.avgAssignPct ?? '—'}% ·{' '}
-                          {isRtl ? 'حضور:' : 'Att:'} {st.attendanceRatePct ?? '—'}%
+                          {isRtl ? 'اختبارات:' : 'Quizzes:'}{' '}
+                          {st.avgQuizPct !== null ? `${st.avgQuizPct}%` : '—'} ·{' '}
+                          {isRtl ? 'واجبات:' : 'Assign:'}{' '}
+                          {st.avgAssignPct !== null ? `${st.avgAssignPct}%` : '—'} ·{' '}
+                          {isRtl ? 'حضور:' : 'Att:'}{' '}
+                          {st.attendanceRatePct !== null ? `${st.attendanceRatePct}%` : '—'}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-sm font-bold text-emerald-700 tabular-nums">
-                          {st.combinedScorePct}%
+                          {st.combinedScorePct !== null ? `${st.combinedScorePct}%` : '—'}
                         </span>
                         {onInspectStudentRecord && (
                           <Button
@@ -544,9 +559,21 @@ export const PerformanceAnalyticsView: React.FC<PerformanceAnalyticsViewProps> =
             <CardHeader
               title={isRtl ? 'طلاب يحتاجون إلى متابعة أكاديمية' : 'Students Needing Academic Attention'}
               subtitle={
-                isRtl
-                  ? `وفق الحدود المعتمدة (< ${data.scope.attentionScoreThreshold}% أداء أو < ${data.scope.attentionAttendanceThreshold}% حضور)`
-                  : `Configured threshold (< ${data.scope.attentionScoreThreshold}% score or < ${data.scope.attentionAttendanceThreshold}% attendance)`
+                data.scope.attentionScoreThreshold !== null || data.scope.attentionAttendanceThreshold !== null
+                  ? isRtl
+                    ? `وفق الحدود المعتمدة (< ${
+                        data.scope.attentionScoreThreshold !== null ? `${data.scope.attentionScoreThreshold}%` : 'غير محدد'
+                      } أداء أو < ${
+                        data.scope.attentionAttendanceThreshold !== null ? `${data.scope.attentionAttendanceThreshold}%` : 'غير محدد'
+                      } حضور)`
+                    : `Configured threshold (< ${
+                        data.scope.attentionScoreThreshold !== null ? `${data.scope.attentionScoreThreshold}%` : 'N/A'
+                      } score or < ${
+                        data.scope.attentionAttendanceThreshold !== null ? `${data.scope.attentionAttendanceThreshold}%` : 'N/A'
+                      } attendance)`
+                  : isRtl
+                  ? 'الحدود المعتمدة غير محددة'
+                  : 'Configured thresholds unavailable'
               }
             />
             <CardContent>
@@ -567,13 +594,15 @@ export const PerformanceAnalyticsView: React.FC<PerformanceAnalyticsViewProps> =
                         <div className="text-[11px] text-rose-700 mt-0.5 tabular-nums">
                           {st.lowAcademic && (
                             <span>
-                              {isRtl ? 'معدل منخفض:' : 'Low score:'} {st.combinedScorePct}%
+                              {isRtl ? 'معدل منخفض:' : 'Low score:'}{' '}
+                              {st.combinedScorePct !== null ? `${st.combinedScorePct}%` : '—'}
                             </span>
                           )}
                           {st.lowAcademic && st.lowAttendance && ' · '}
                           {st.lowAttendance && (
                             <span>
-                              {isRtl ? 'حضور منخفض:' : 'Low attendance:'} {st.attendanceRatePct}%
+                              {isRtl ? 'حضور منخفض:' : 'Low attendance:'}{' '}
+                              {st.attendanceRatePct !== null ? `${st.attendanceRatePct}%` : '—'}
                             </span>
                           )}
                         </div>
