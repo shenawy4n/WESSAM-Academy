@@ -395,6 +395,7 @@ BEGIN
   SELECT id INTO v_att_id FROM public.quiz_attempts
   WHERE quiz_id = 'cccccccc-1111-4111-8111-111111111111' AND student_id = '22222222-3333-4222-8222-222222222222'
   LIMIT 1;
+  PERFORM set_config('test.quiz1_attempt_id', v_att_id::text, true);
 
   v_ans := jsonb_build_array(
     jsonb_build_object(
@@ -445,7 +446,7 @@ SELECT extensions.results_eq(
 -- 3. Student 2 cannot save answers to Student 1 attempt
 SET LOCAL "request.jwt.claim.sub" = '33333333-3333-4333-8333-333333333333';
 SELECT extensions.throws_ok(
-  $$ SELECT public.save_quiz_answers((SELECT id FROM public.quiz_attempts WHERE quiz_id = 'cccccccc-1111-4111-8111-111111111111' LIMIT 1), '[]'::jsonb) $$,
+  $$ SELECT public.save_quiz_answers(current_setting('test.quiz1_attempt_id')::uuid, '[]'::jsonb) $$,
   '42501',
   NULL,
   'Student 2 cannot save answers to Student 1 attempt'
@@ -482,7 +483,7 @@ RESET ROLE;
 SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.sub" = '33333333-3333-4333-8333-333333333333';
 SELECT extensions.throws_ok(
-  $$ SELECT public.submit_quiz_attempt((SELECT id FROM public.quiz_attempts WHERE quiz_id = 'cccccccc-1111-4111-8111-111111111111' LIMIT 1)) $$,
+  $$ SELECT public.submit_quiz_attempt(current_setting('test.quiz1_attempt_id')::uuid) $$,
   '42501',
   NULL,
   'Student 2 cannot submit Student 1 attempt'
@@ -533,7 +534,7 @@ SELECT extensions.is(
 
 -- 8. Saving answers on submitted attempt is rejected
 SELECT extensions.throws_ok(
-  $$ SELECT public.save_quiz_answers((SELECT id FROM public.quiz_attempts WHERE quiz_id = 'cccccccc-1111-4111-8111-111111111111' LIMIT 1), '[]'::jsonb) $$,
+  $$ SELECT public.save_quiz_answers(current_setting('test.quiz1_attempt_id')::uuid, '[]'::jsonb) $$,
   '42501',
   NULL,
   'Saving answers on a submitted attempt is rejected'
@@ -554,6 +555,7 @@ DECLARE
 BEGIN
   v_res := public.start_quiz_attempt('cccccccc-4444-4111-8111-111111111111'::uuid);
   v_att_id := (v_res->>'attempt_id')::UUID;
+  PERFORM set_config('test.quiz4_attempt_id', v_att_id::text, true);
 
   PERFORM public.save_quiz_answers(v_att_id, jsonb_build_array(
     jsonb_build_object(
@@ -580,7 +582,7 @@ SELECT extensions.results_eq(
 -- 2. Student cannot invoke grade_student_attempt
 SELECT extensions.throws_ok(
   $$ SELECT public.grade_student_attempt(
-       (SELECT id FROM public.quiz_attempts WHERE quiz_id = 'cccccccc-4444-4111-8111-111111111111' LIMIT 1),
+       current_setting('test.quiz4_attempt_id')::uuid,
        '[]'::jsonb,
        'Self grade'
      ) $$,
@@ -593,7 +595,7 @@ SELECT extensions.throws_ok(
 SET LOCAL "request.jwt.claim.sub" = '88888888-2222-4888-8888-888888888888';
 SELECT extensions.throws_ok(
   $$ SELECT public.grade_student_attempt(
-       (SELECT id FROM public.quiz_attempts WHERE quiz_id = 'cccccccc-4444-4111-8111-111111111111' LIMIT 1),
+       current_setting('test.quiz4_attempt_id')::uuid,
        '[]'::jsonb,
        'Unauthorized grade'
      ) $$,
@@ -649,7 +651,7 @@ RESET ROLE;
 SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.sub" = '33333333-3333-4333-8333-333333333333';
 SELECT extensions.throws_ok(
-  $$ SELECT public.get_quiz_attempt_review((SELECT id FROM public.quiz_attempts WHERE quiz_id = 'cccccccc-1111-4111-8111-111111111111' LIMIT 1)) $$,
+  $$ SELECT public.get_quiz_attempt_review(current_setting('test.quiz1_attempt_id')::uuid) $$,
   '42501',
   NULL,
   'Student 2 cannot review Student 1 attempt'

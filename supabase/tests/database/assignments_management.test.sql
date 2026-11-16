@@ -27,7 +27,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(24);
+SELECT extensions.plan(25);
 
 -- -----------------------------------------------------------------------------
 -- 1. Deterministic isolated identities
@@ -58,14 +58,23 @@ VALUES ('f5555555-0000-0000-0000-000000000001', 'IELTS Writing Task 2', 'مقر�
 ON CONFLICT (id) DO NOTHING;
 
 -- Group for testing
-INSERT INTO public.groups (id, name, name_arabic, course_id, academic_year, max_students, is_active)
-VALUES ('15555555-0000-0000-0000-000000000001', 'Group Alpha', 'المجموعة ألفا', 'f5555555-0000-0000-0000-000000000001', '2026/2027', 30, true)
+INSERT INTO public.groups (id, name, name_arabic, academic_year, max_students, is_active)
+VALUES ('15555555-0000-0000-0000-000000000001', 'Group Alpha', 'المجموعة ألفا', '2026/2027', 30, true)
 ON CONFLICT (id) DO NOTHING;
 
--- Enroll Student 1 in Group Alpha
-INSERT INTO public.group_students (group_id, student_id, is_primary)
-VALUES ('15555555-0000-0000-0000-000000000001', 'c5555555-0000-0000-0000-000000000003', true)
+-- Link Course to Group Alpha
+INSERT INTO public.group_courses (group_id, course_id)
+VALUES ('15555555-0000-0000-0000-000000000001', 'f5555555-0000-0000-0000-000000000001')
+ON CONFLICT (group_id, course_id) DO NOTHING;
+
+-- Enroll Student 1 in Group Alpha (with primary cohort on student_academic_profiles)
+INSERT INTO public.group_students (group_id, student_id)
+VALUES ('15555555-0000-0000-0000-000000000001', 'c5555555-0000-0000-0000-000000000003')
 ON CONFLICT (group_id, student_id) DO NOTHING;
+
+INSERT INTO public.student_academic_profiles (profile_id, student_number, username, group_id, status)
+VALUES ('c5555555-0000-0000-0000-000000000003', 'WES-AS-001', 'student_as_1', '15555555-0000-0000-0000-000000000001', 'active')
+ON CONFLICT (profile_id) DO UPDATE SET group_id = EXCLUDED.group_id;
 
 -- -----------------------------------------------------------------------------
 -- 2. Schema structure tests
@@ -141,12 +150,24 @@ SELECT extensions.lives_ok(
   'Teacher A can create published assignment with group target'
 );
 
--- Verify target insertion
+-- Verify target insertion and capture assignment ID for downstream authorization checks
 SELECT extensions.is(
   (SELECT count(*)::int FROM public.assignment_targets WHERE target_type = 'group' AND group_id = '15555555-0000-0000-0000-000000000001'),
   1,
   'Assignment target was atomically created'
 );
+
+DO $$
+DECLARE
+  v_assign_id UUID;
+BEGIN
+  SELECT id INTO v_assign_id
+  FROM public.assignments
+  WHERE title = 'Essay on Technology in Education'
+  LIMIT 1;
+  PERFORM set_config('test.assignment_id', v_assign_id::text, true);
+END;
+$$;
 
 -- -----------------------------------------------------------------------------
 -- 5. Student Access Isolation
@@ -174,7 +195,7 @@ SELECT extensions.is(
 SELECT extensions.throws_ok(
   $$
     SELECT public.submit_assignment(
-      (SELECT id FROM public.assignments WHERE title = 'Essay on Technology in Education' LIMIT 1),
+      current_setting('test.assignment_id')::uuid,
       'My unauthorized essay'
     );
   $$,
@@ -188,7 +209,7 @@ SET LOCAL "request.jwt.claims" = '{"sub":"c5555555-0000-0000-0000-000000000003",
 SELECT extensions.lives_ok(
   $$
     SELECT public.submit_assignment(
-      (SELECT id FROM public.assignments WHERE title = 'Essay on Technology in Education' LIMIT 1),
+      current_setting('test.assignment_id')::uuid,
       'Technology has transformed modern education by enabling flexible online learning...',
       '[{"name":"essay.docx","path":"submissions/test/essay.docx","size":12345}]'::jsonb,
       'Teacher, please review my grammar in paragraph 2'
@@ -197,9 +218,22 @@ SELECT extensions.lives_ok(
   'Student 1 submits attempt 1 successfully'
 );
 
+-- Capture submission ID while authorized as Student 1
+DO $$
+DECLARE
+  v_sub_id UUID;
+BEGIN
+  SELECT id INTO v_sub_id
+  FROM public.submissions
+  WHERE student_id = 'c5555555-0000-0000-0000-000000000003'
+  LIMIT 1;
+  PERFORM set_config('test.submission_id', v_sub_id::text, true);
+END;
+$$;
+
 -- Verify submission attempt number and state
 SELECT extensions.is(
-  (SELECT attempt_number FROM public.submissions WHERE student_id = 'c5555555-0000-0000-0000-000000000003' LIMIT 1),
+  (SELECT attempt_number FROM public.submissions WHERE id = current_setting('test.submission_id')::uuid),
   1,
   'Submission recorded as attempt 1'
 );
@@ -212,7 +246,7 @@ SET LOCAL "request.jwt.claims" = '{"sub":"b5555555-0000-0000-0000-000000000002",
 SELECT extensions.throws_ok(
   $$
     SELECT public.grade_assignment_submission(
-      (SELECT id FROM public.submissions WHERE student_id = 'c5555555-0000-0000-0000-000000000003' LIMIT 1),
+      current_setting('test.submission_id')::uuid,
       90,
       'Great work',
       'Private notes',
@@ -233,7 +267,7 @@ SET LOCAL "request.jwt.claims" = '{"sub":"a5555555-0000-0000-0000-000000000001",
 SELECT extensions.throws_ok(
   $$
     SELECT public.grade_assignment_submission(
-      (SELECT id FROM public.submissions WHERE student_id = 'c5555555-0000-0000-0000-000000000003' LIMIT 1),
+      current_setting('test.submission_id')::uuid,
       150, -- max score is 100
       'Too high'
     );
@@ -247,7 +281,7 @@ SELECT extensions.throws_ok(
 SELECT extensions.lives_ok(
   $$
     SELECT public.grade_assignment_submission(
-      (SELECT id FROM public.submissions WHERE student_id = 'c5555555-0000-0000-0000-000000000003' LIMIT 1),
+      current_setting('test.submission_id')::uuid,
       88,
       'Excellent essay structure and vocabulary.',
       'Student shows high potential in argumentative writing.',

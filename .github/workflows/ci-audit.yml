@@ -88,7 +88,8 @@ jobs:
             20261114000021_phase6_system_settings.sql \
             20261114000022_fix_academic_records_schema_compatibility.sql \
             20261115000023_harden_governance_and_analytics.sql \
-            20261116000024_super_admin_teacher_provisioning.sql
+            20261116000024_super_admin_teacher_provisioning.sql \
+            20261116000025_remediate_schema_triggers_and_rpc_compatibility.sql
           do
             test -f "supabase/migrations/$migration" || {
               echo "::error::Missing migration: $migration"

@@ -27,7 +27,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(28);
+SELECT extensions.plan(30);
 
 -- -----------------------------------------------------------------------------
 -- 1. Deterministic isolated identities
@@ -56,7 +56,7 @@ VALUES ('e1111111-0000-0000-0000-000000000001', 'QB Course A', 'كورس بنك 
 ON CONFLICT (id) DO NOTHING;
 
 -- Quiz owned by Teacher A
-INSERT INTO public.quizzes (id, course_id, created_by, title, title_arabic, total_points, passing_score_percentage, is_published)
+INSERT INTO public.quizzes (id, course_id, teacher_id, title, title_arabic, total_points, passing_score, is_published)
 VALUES ('f1111111-0000-0000-0000-000000000001', 'e1111111-0000-0000-0000-000000000001', 'a1111111-0000-0000-0000-000000000001', 'QB Test Quiz', 'اختبار تجريبي', 0, 60, false)
 ON CONFLICT (id) DO NOTHING;
 
