@@ -20,7 +20,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(44);
+SELECT extensions.plan(49);
 
 -- -----------------------------------------------------------------------------
 -- 1. Isolated Test Users, Groups & Courses
@@ -96,9 +96,16 @@ SELECT extensions.has_table('public', 'message_conversations', 'Table message_co
 SELECT extensions.has_table('public', 'messages', 'Table messages exists'); -- 2
 SELECT extensions.has_table('public', 'message_attachments', 'Table message_attachments exists'); -- 3
 
-SELECT extensions.results_eq(
-  $$ SELECT ARRAY[public, file_size_limit]::text[] FROM storage.buckets WHERE id = 'message-attachments' $$,
-  ARRAY[ARRAY['false', '10485760']::text[]],
+SELECT extensions.is(
+  COALESCE(
+    (
+      SELECT (public = false AND file_size_limit = 10485760)
+      FROM storage.buckets
+      WHERE id = 'message-attachments'
+    ),
+    false
+  ),
+  true,
   'Private bucket message-attachments exists with 10MB file limit and public=false'
 ); -- 4
 
@@ -310,7 +317,7 @@ SELECT extensions.throws_ok(
   'Student 1 CANNOT spoof sender_id on direct INSERT'
 ); -- 27
 
--- Column-level privileges block recipient (Teacher 1) from altering message body
+-- Column-level privileges block recipient (Teacher 1) from altering message body or sender_id or deleting messages
 SET LOCAL "request.jwt.claim.sub" = '11111111-7777-4111-8111-111111111111';
 SELECT extensions.throws_ok(
   $$ UPDATE public.messages SET body = 'Tampered body' WHERE id = current_setting('test.msg_id')::uuid $$,
@@ -318,6 +325,38 @@ SELECT extensions.throws_ok(
   NULL,
   'Column-level GRANT blocks recipient from tampering with message body'
 ); -- 28
+
+SELECT extensions.throws_ok(
+  $$ UPDATE public.messages SET sender_id = '88888888-7777-4888-8888-888888888888' WHERE id = current_setting('test.msg_id')::uuid $$,
+  '42501',
+  NULL,
+  'Column-level GRANT blocks recipient from altering sender_id'
+); -- 28b
+
+SELECT extensions.throws_ok(
+  $$ DELETE FROM public.messages WHERE id = current_setting('test.msg_id')::uuid $$,
+  '42501',
+  NULL,
+  'Revoked DELETE privilege blocks authenticated recipient from deleting messages'
+); -- 28c
+
+SELECT extensions.is(
+  has_column_privilege('authenticated', 'public.messages', 'body', 'UPDATE'),
+  false,
+  'authenticated role does NOT hold UPDATE privilege on messages.body'
+); -- 28d
+
+SELECT extensions.is(
+  has_column_privilege('authenticated', 'public.messages', 'is_read', 'UPDATE'),
+  true,
+  'authenticated role holds UPDATE privilege on messages.is_read'
+); -- 28e
+
+SELECT extensions.is(
+  has_column_privilege('authenticated', 'public.messages', 'read_at', 'UPDATE'),
+  true,
+  'authenticated role holds UPDATE privilege on messages.read_at'
+); -- 28f
 
 -- Storage security checks: path traversal, wrong uploader prefix, non-participant read
 SELECT extensions.is(

@@ -27,7 +27,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(25);
+SELECT extensions.plan(29);
 
 -- -----------------------------------------------------------------------------
 -- 1. Deterministic isolated identities
@@ -109,6 +109,32 @@ SELECT extensions.throws_ok(
   '42501',
   NULL,
   'Anonymous cannot read submissions'
+);
+
+RESET ROLE;
+
+SELECT extensions.is(
+  has_table_privilege('anon', 'public.assignments', 'SELECT'),
+  false,
+  'anon does not have SELECT privilege on public.assignments'
+);
+
+SELECT extensions.is(
+  has_table_privilege('anon', 'public.assignment_targets', 'SELECT'),
+  false,
+  'anon does not have SELECT privilege on public.assignment_targets'
+);
+
+SELECT extensions.is(
+  has_table_privilege('anon', 'public.submissions', 'SELECT'),
+  false,
+  'anon does not have SELECT privilege on public.submissions'
+);
+
+SELECT extensions.is(
+  has_table_privilege('anon', 'public.assignment_grading_history', 'SELECT'),
+  false,
+  'anon does not have SELECT privilege on public.assignment_grading_history'
 );
 
 -- -----------------------------------------------------------------------------

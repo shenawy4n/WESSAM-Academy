@@ -15,7 +15,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(57);
+SELECT extensions.plan(59);
 
 -- -----------------------------------------------------------------------------
 -- 1. Deterministic isolated identities
@@ -299,7 +299,8 @@ SELECT extensions.results_eq(
   'Notification created for published announcement'
 );
 
--- 5. Delivered to active Student 1 in Cohort A
+-- 5. Delivered to active Student 1 in Cohort A (verified as Student 1 under RLS)
+SET LOCAL "request.jwt.claim.sub" = '22222222-4444-4222-8222-222222222222';
 SELECT extensions.results_eq(
   $$ SELECT count(*)::int FROM public.notification_recipients nr
      JOIN public.notifications n ON n.id = nr.notification_id
@@ -309,15 +310,28 @@ SELECT extensions.results_eq(
   'Notification recipient record delivered to active Student 1'
 );
 
--- 6. Inactive student in Cohort A was NOT delivered notification
+-- 6. Inactive student in Cohort A cannot view any recipients under RLS and was NOT delivered notification
+SET LOCAL "request.jwt.claim.sub" = '55555555-4444-4555-8555-555555555555';
 SELECT extensions.results_eq(
   $$ SELECT count(*)::int FROM public.notification_recipients nr
      JOIN public.notifications n ON n.id = nr.notification_id
      WHERE n.announcement_id = 'eeeeeeee-4444-4111-8111-111111111111'
        AND nr.recipient_id = '55555555-4444-4555-8555-555555555555' $$,
   ARRAY[0],
-  'Inactive student was NOT delivered notification'
+  'Inactive student sees 0 notification recipients under RLS'
 );
+
+RESET ROLE;
+SELECT extensions.results_eq(
+  $$ SELECT count(*)::int FROM public.notification_recipients nr
+     JOIN public.notifications n ON n.id = nr.notification_id
+     WHERE n.announcement_id = 'eeeeeeee-4444-4111-8111-111111111111'
+       AND nr.recipient_id = '55555555-4444-4555-8555-555555555555' $$,
+  ARRAY[0],
+  'Inactive student was NOT delivered notification (verified bypassing RLS)'
+);
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '11111111-4444-4111-8111-111111111111';
 
 -- 7. Teacher 1 publishing to individual authorized Student 1 delivers 1 recipient row
 INSERT INTO public.announcements (
@@ -385,7 +399,8 @@ SELECT extensions.results_eq(
   'Exactly 1 notification record exists for announcement'
 );
 
--- 2. Recipient row count remains exactly 1 for Student 1
+-- 2. Recipient row count remains exactly 1 for Student 1 (checked as Student 1 under RLS)
+SET LOCAL "request.jwt.claim.sub" = '22222222-4444-4222-8222-222222222222';
 SELECT extensions.results_eq(
   $$ SELECT count(*)::int FROM public.notification_recipients nr
      JOIN public.notifications n ON n.id = nr.notification_id
@@ -395,7 +410,18 @@ SELECT extensions.results_eq(
   'No duplicate recipient rows exist for Student 1'
 );
 
--- 3. Direct insertion of duplicate (notification_id, recipient_id) is blocked
+-- 3. Authenticated direct insertion into notification_recipients is blocked by privileges/RLS (42501)
+SELECT extensions.throws_ok(
+  $$ INSERT INTO public.notification_recipients (notification_id, recipient_id)
+     SELECT id, '22222222-4444-4222-8222-222222222222'
+     FROM public.notifications WHERE announcement_id = 'eeeeeeee-4444-4111-8111-111111111111' $$,
+  '42501',
+  NULL,
+  'Authenticated users cannot directly insert into notification_recipients'
+);
+RESET ROLE;
+
+-- 4. Unique constraint blocks duplicate (notification_id, recipient_id) in privileged context (23505)
 SELECT extensions.throws_ok(
   $$ INSERT INTO public.notification_recipients (notification_id, recipient_id)
      SELECT id, '22222222-4444-4222-8222-222222222222'
@@ -404,7 +430,6 @@ SELECT extensions.throws_ok(
   NULL,
   'Unique constraint prevents duplicate notification delivery to same recipient'
 );
-RESET ROLE;
 
 -- =============================================================================
 -- PART 6: SCHEDULED ANNOUNCEMENTS & ARCHIVING (6 Assertions)
@@ -699,13 +724,16 @@ SELECT extensions.results_eq(
 
 -- 5. Grading a quiz attempt fires trigger
 INSERT INTO public.quiz_attempts (
-  id, quiz_id, student_id, status, points_scored, total_points_possible, percentage_score, created_at
+  id, quiz_id, student_id, status, points_scored, total_points_possible, percentage_score,
+  question_snapshot, created_at
 ) VALUES (
   'ffffffff-4444-4666-8666-666666666666',
   'ffffffff-4444-4555-8555-555555555555',
   '22222222-4444-4222-8222-222222222222',
   'graded',
-  18, 20, 90, now()
+  18, 20, 90,
+  '[{"question_id":"00000000-0000-4000-8000-000000000001","question_text":"Choose the correct tense","question_text_arabic":"اختر الزمن الصحيح","question_type":"multiple_choice","points":20,"order_index":1,"is_required":true}]'::jsonb,
+  now()
 ) ON CONFLICT (id) DO NOTHING;
 
 SELECT extensions.results_eq(

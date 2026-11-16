@@ -13,7 +13,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(70);
+SELECT extensions.plan(72);
 
 -- -----------------------------------------------------------------------------
 -- 1. Deterministic isolated identities
@@ -181,6 +181,34 @@ SELECT extensions.lives_ok(
       'scheduled'
     )$$,
   'Teacher owner can insert a live session for their group'
+);
+
+-- Test 23b: Notification for English-only live session falls back safely for title_arabic
+SELECT extensions.is(
+  (
+    SELECT count(*)::int
+    FROM public.notifications
+    WHERE category = 'live_session'
+      AND related_resource_id = 'bbbbbbbb-4444-4444-8444-111111111111'
+      AND title_arabic IS NOT NULL
+      AND title_arabic LIKE '%Teacher Inserted Session%'
+  ),
+  1,
+  'Live session without title_arabic generates non-null fallback notification title_arabic'
+);
+
+-- Test 23c: Notification for session with Arabic title preserves Arabic title_arabic
+SELECT extensions.is(
+  (
+    SELECT count(*)::int
+    FROM public.notifications
+    WHERE category = 'live_session'
+      AND related_resource_id = 'bbbbbbbb-1111-4111-8111-111111111111'
+      AND title_arabic IS NOT NULL
+      AND title_arabic LIKE '%حصة القواعد المباشرة 1%'
+  ),
+  1,
+  'Live session with title_arabic preserves Arabic title in notification'
 );
 
 -- Test 24: Teacher owner can update live session
@@ -667,4 +695,5 @@ SELECT extensions.is(
 );
 
 -- Finish test transaction
+SELECT * FROM extensions.finish();
 ROLLBACK;
