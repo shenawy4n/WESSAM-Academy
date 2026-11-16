@@ -16,7 +16,7 @@
 -- ==============================================================================
 
 BEGIN;
-SELECT plan(17);
+SELECT plan(34);
 
 -- Setup synthetic test users
 DO $$
@@ -26,6 +26,7 @@ DECLARE
     v_teacher_b UUID := '11111111-1111-4111-8111-111111111103';
     v_student_a UUID := '11111111-1111-4111-8111-111111111104';
     v_student_b UUID := '11111111-1111-4111-8111-111111111105';
+    v_super_inactive UUID := '11111111-1111-4111-8111-111111111106';
     v_group_a UUID := '22222222-2222-4222-8222-222222222201';
     v_course_a UUID := '33333333-3333-4333-8333-333333333301';
     v_assign_a UUID := '44444444-4444-4444-8444-444444444401';
@@ -36,7 +37,8 @@ BEGIN
         (v_teacher_a, 'teachera_p6@wessam.test'),
         (v_teacher_b, 'teacherb_p6@wessam.test'),
         (v_student_a, 'studenta_p6@wessam.test'),
-        (v_student_b, 'studentb_p6@wessam.test')
+        (v_student_b, 'studentb_p6@wessam.test'),
+        (v_super_inactive, 'super_inactive_p6@wessam.test')
     ON CONFLICT (id) DO NOTHING;
 
     INSERT INTO public.profiles (id, role, full_name, full_name_arabic, status) VALUES
@@ -44,7 +46,8 @@ BEGIN
         (v_teacher_a, 'teacher', 'Teacher A P6', 'المعلم أ', 'active'),
         (v_teacher_b, 'teacher', 'Teacher B P6', 'المعلم ب', 'active'),
         (v_student_a, 'student', 'Student A P6', 'الطالب أ', 'active'),
-        (v_student_b, 'student', 'Student B P6', 'الطالب ب', 'active')
+        (v_student_b, 'student', 'Student B P6', 'الطالب ب', 'active'),
+        (v_super_inactive, 'super_admin', 'Inactive Super P6', 'مشرف غير نشط', 'inactive')
     ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status;
 
     INSERT INTO public.groups (id, name, name_arabic, academic_year, is_active) VALUES
@@ -230,6 +233,171 @@ SELECT is(
     ((public.get_phase6_analytics_dashboard(NULL, NULL, NULL, NULL, '2026/2027', NULL))->'kpis'->>'published_courses_count')::int,
     1,
     'Analytics published_courses_count returns course assigned to matching academic_year'
+);
+
+-- ==============================================================================
+-- 15. Staff Account Access Governance & account_status_enum Regression Checks
+-- ==============================================================================
+
+-- 15a. Anonymous caller blocked from update_staff_account_access
+RESET ROLE;
+SET LOCAL ROLE anon;
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', 'inactive', 'anon attempt') $$,
+    '42501',
+    NULL,
+    'Anonymous caller cannot invoke update_staff_account_access'
+);
+
+-- 15b. Student caller blocked from update_staff_account_access
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111104', true);
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'super_admin', 'active', 'student attempt') $$,
+    '42501',
+    NULL,
+    'Student caller cannot invoke update_staff_account_access'
+);
+
+-- 15c. Active Teacher caller blocked from update_staff_account_access
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111102', true);
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111103'::uuid, 'super_admin', 'active', 'teacher attempt') $$,
+    '42501',
+    NULL,
+    'Teacher caller cannot invoke update_staff_account_access'
+);
+
+-- 15d. Inactive Super Admin caller blocked from update_staff_account_access
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111106', true);
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'super_admin', 'active', 'inactive super attempt') $$,
+    '42501',
+    NULL,
+    'Inactive Super Admin cannot invoke update_staff_account_access'
+);
+
+-- 15e. Input validation: unsupported, empty, whitespace-only, and NULL status/role rejected with 22023
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', 'archived', 'invalid status') $$,
+    '22023',
+    NULL,
+    'Unsupported account status value is rejected with SQLSTATE 22023'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', '', 'empty status') $$,
+    '22023',
+    NULL,
+    'Empty string account status is rejected with SQLSTATE 22023'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', '   ', 'whitespace status') $$,
+    '22023',
+    NULL,
+    'Whitespace-only account status is rejected with SQLSTATE 22023'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', NULL, 'null status') $$,
+    '22023',
+    NULL,
+    'NULL account status is rejected with SQLSTATE 22023'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'moderator', 'active', 'unsupported role') $$,
+    '22023',
+    NULL,
+    'Unsupported staff role is rejected with SQLSTATE 22023'
+);
+
+-- 15f. Student accounts cannot be promoted directly via staff access governance
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111104'::uuid, 'teacher', 'active', 'promote student') $$,
+    '42501',
+    NULL,
+    'Student accounts cannot be modified via update_staff_account_access'
+);
+
+-- 15g. Valid role promotion and valid enum status transitions persist cleanly as account_status_enum
+SELECT is(
+    (public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'super_admin', 'active', 'promote teacher')->>'role'),
+    'super_admin',
+    'Active Super Admin can promote teacher to super_admin'
+);
+
+SELECT is(
+    (public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', 'suspended', 'suspend access')->>'status'),
+    'suspended',
+    'update_staff_account_access returns suspended status for valid status update'
+);
+
+SELECT is(
+    (
+        SELECT status::text
+        FROM public.profiles
+        WHERE id = '11111111-1111-4111-8111-111111111102'::uuid
+          AND role = 'teacher'::public.user_role_enum
+          AND status = 'suspended'::public.account_status_enum
+    ),
+    'suspended',
+    'Valid status update casts and persists p_new_status as public.account_status_enum'
+);
+
+SELECT lives_ok(
+    $$
+    DO $inner$
+    BEGIN
+        PERFORM public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', 'inactive', 'deactivate access');
+        PERFORM public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, 'teacher', 'active', 'restore active');
+    END $inner$;
+    $$,
+    'Valid inactive and active status transitions succeed cleanly'
+);
+
+-- 15h. Audit logging captures policy updates cleanly without credential fields
+SELECT is(
+    (
+        SELECT COUNT(*)::int
+        FROM public.audit_logs
+        WHERE actor_id = '11111111-1111-4111-8111-111111111101'::uuid
+          AND action = 'UPDATE_STAFF_ACCESS_POLICY'
+          AND entity_type = 'access_policy'
+          AND entity_id = '11111111-1111-4111-8111-111111111102'
+          AND new_data->>'status' = 'suspended'
+          AND NOT (new_data ? 'password')
+          AND NOT public.jsonb_contains_forbidden_secret_key(new_data)
+    ),
+    1,
+    'Audit log records UPDATE_STAFF_ACCESS_POLICY cleanly without credentials'
+);
+
+-- 15i. Deterministic guard: last active Super Admin cannot be demoted or deactivated (isolated inside rolled-back tx)
+RESET ROLE;
+UPDATE public.profiles
+SET status = 'inactive'::public.account_status_enum
+WHERE role = 'super_admin'::public.user_role_enum
+  AND status = 'active'::public.account_status_enum
+  AND id <> '11111111-1111-4111-8111-111111111101'::uuid;
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111101'::uuid, 'teacher', 'active', 'last admin demote') $$,
+    'P0001',
+    NULL,
+    'Last active Super Admin cannot be demoted to teacher'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111101'::uuid, 'super_admin', 'inactive', 'last admin deactivate') $$,
+    'P0001',
+    NULL,
+    'Last active Super Admin cannot be deactivated'
 );
 
 SELECT * FROM finish();
