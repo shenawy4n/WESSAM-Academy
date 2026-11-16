@@ -87,7 +87,8 @@ jobs:
             20261114000020_phase6_analytics_rpcs.sql \
             20261114000021_phase6_system_settings.sql \
             20261114000022_fix_academic_records_schema_compatibility.sql \
-            20261115000023_harden_governance_and_analytics.sql
+            20261115000023_harden_governance_and_analytics.sql \
+            20261116000024_super_admin_teacher_provisioning.sql
           do
             test -f "supabase/migrations/$migration" || {
               echo "::error::Missing migration: $migration"
@@ -95,7 +96,7 @@ jobs:
             }
           done
 
-          for fn in create-student student-login reset-student-password; do
+          for fn in create-student create-teacher student-login reset-student-password; do
             test -f "supabase/functions/$fn/index.ts" || {
               echo "::error::Missing Edge Function: $fn"
               exit 1

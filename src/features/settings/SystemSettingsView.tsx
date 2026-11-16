@@ -15,13 +15,16 @@ import {
   StaffGovernanceDirectory,
   SystemSettingsBundle,
   canModifyStaffRoleOrStatus,
+  createTeacherAccount,
   fetchSettingsAuditLogs,
   fetchStaffAccessDirectory,
   fetchSystemSettingsBundle,
   updateStaffAccountAccess,
   updateSystemSetting,
+  validateCreateTeacherInput,
   validateSettingPayload,
 } from './settingsService';
+import { ServiceError } from '../../lib/errors/serviceError';
 import { formatRecordTimestampRiyadh } from '../academicRecords/academicRecordsService';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -33,6 +36,8 @@ import {
   Bell,
   Building2,
   CheckCircle2,
+  Eye,
+  EyeOff,
   GraduationCap,
   History,
   Palette,
@@ -41,6 +46,7 @@ import {
   Settings2,
   ShieldCheck,
   Sliders,
+  UserPlus,
 } from 'lucide-react';
 
 type SettingsSectionId =
@@ -81,6 +87,18 @@ export const SystemSettingsView: React.FC<{ onUnauthorizedReturn?: () => void }>
   const [staffReason, setStaffReason] = useState('');
   const [staffSubmitting, setStaffSubmitting] = useState(false);
   const [staffError, setStaffError] = useState<unknown>(null);
+
+  // Create Teacher modal state (Super Admin only)
+  const [isCreateTeacherOpen, setIsCreateTeacherOpen] = useState(false);
+  const [teacherFullName, setTeacherFullName] = useState('');
+  const [teacherFullNameArabic, setTeacherFullNameArabic] = useState('');
+  const [teacherEmail, setTeacherEmail] = useState('');
+  const [teacherPhone, setTeacherPhone] = useState('');
+  const [teacherPassword, setTeacherPassword] = useState('');
+  const [teacherConfirmPassword, setTeacherConfirmPassword] = useState('');
+  const [showTeacherPassword, setShowTeacherPassword] = useState(false);
+  const [createTeacherSubmitting, setCreateTeacherSubmitting] = useState(false);
+  const [createTeacherError, setCreateTeacherError] = useState<unknown>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -237,6 +255,90 @@ export const SystemSettingsView: React.FC<{ onUnauthorizedReturn?: () => void }>
       setStaffError(err);
     } finally {
       setStaffSubmitting(false);
+    }
+  };
+
+  const resetCreateTeacherForm = () => {
+    setTeacherFullName('');
+    setTeacherFullNameArabic('');
+    setTeacherEmail('');
+    setTeacherPhone('');
+    setTeacherPassword('');
+    setTeacherConfirmPassword('');
+    setShowTeacherPassword(false);
+    setCreateTeacherError(null);
+  };
+
+  const handleOpenCreateTeacher = () => {
+    if (role !== 'super_admin') return;
+    resetCreateTeacherForm();
+    setIsCreateTeacherOpen(true);
+  };
+
+  const handleCreateTeacherSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (role !== 'super_admin') return;
+
+    const payload = {
+      fullName: teacherFullName,
+      fullNameArabic: teacherFullNameArabic || undefined,
+      email: teacherEmail,
+      phone: teacherPhone || undefined,
+      password: teacherPassword,
+    };
+
+    const validationError = validateCreateTeacherInput(payload, teacherConfirmPassword, isRtl);
+    if (validationError) {
+      setCreateTeacherError(
+        new ServiceError({
+          category: 'VALIDATION_ERROR',
+          message: validationError,
+          service: 'SystemSettingsView',
+          operation: 'handleCreateTeacherSubmit',
+        })
+      );
+      return;
+    }
+
+    setCreateTeacherSubmitting(true);
+    setCreateTeacherError(null);
+    try {
+      const created = await createTeacherAccount(payload);
+      resetCreateTeacherForm();
+      setIsCreateTeacherOpen(false);
+
+      const [freshDir, freshLogs] = await Promise.all([
+        fetchStaffAccessDirectory(),
+        fetchSettingsAuditLogs(40, 0),
+      ]);
+      setDirectory(freshDir);
+      setAuditLogs(freshLogs);
+
+      const displayName = isRtl ? created.fullNameArabic : created.fullName;
+      setSaveSuccessMsg(
+        isRtl
+          ? `تم إنشاء حساب المعلم "${displayName}" (${created.email}) بصلاحية teacher وتوثيق العملية في سجل التدقيق.`
+          : `Teacher account created for "${displayName}" (${created.email}) with role "teacher" and recorded in the audit log.`
+      );
+    } catch (err) {
+      if (err instanceof ServiceError && err.code === 'EMAIL_ALREADY_EXISTS') {
+        setCreateTeacherError(
+          new ServiceError({
+            category: 'VALIDATION_ERROR',
+            message: isRtl
+              ? 'هذا البريد الإلكتروني مسجل مسبقاً. يرجى استخدام بريد إلكتروني آخر.'
+              : 'An account with this email already exists.',
+            service: err.service,
+            operation: err.operation,
+            code: err.code,
+            status: err.status,
+          })
+        );
+      } else {
+        setCreateTeacherError(err);
+      }
+    } finally {
+      setCreateTeacherSubmitting(false);
     }
   };
 
@@ -825,6 +927,19 @@ export const SystemSettingsView: React.FC<{ onUnauthorizedReturn?: () => void }>
                         : `Active Super Admins: ${directory.roleCounts.activeSuperAdmins} · Teachers: ${directory.roleCounts.activeTeachers} · Active Students: ${directory.roleCounts.activeStudents}`
                       : undefined
                   }
+                  action={
+                    role === 'super_admin' ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={handleOpenCreateTeacher}
+                        icon={<UserPlus className="w-3.5 h-3.5" />}
+                      >
+                        {isRtl ? 'إضافة حساب معلم' : 'Create Teacher Account'}
+                      </Button>
+                    ) : undefined
+                  }
                 />
                 <CardContent className="p-0">
                   {!directory || directory.staffAccounts.length === 0 ? (
@@ -858,6 +973,11 @@ export const SystemSettingsView: React.FC<{ onUnauthorizedReturn?: () => void }>
                                     </span>
                                   )}
                                 </div>
+                                {acc.email && (
+                                  <div className="text-[11px] text-slate-500 mt-0.5 font-mono" dir="ltr">
+                                    {acc.email}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3 px-4 font-medium">
                                 {acc.role === 'super_admin'
@@ -1293,6 +1413,178 @@ export const SystemSettingsView: React.FC<{ onUnauthorizedReturn?: () => void }>
             </Button>
             <Button type="submit" variant="primary" size="sm" isLoading={staffSubmitting}>
               {isRtl ? 'تطبيق الصلاحية' : 'Update Access'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Create Teacher Account Modal (Super Admin Only) */}
+      <Modal
+        isOpen={isCreateTeacherOpen}
+        onClose={() => {
+          if (!createTeacherSubmitting) {
+            resetCreateTeacherForm();
+            setIsCreateTeacherOpen(false);
+          }
+        }}
+        title={isRtl ? 'إنشاء حساب معلم جديد' : 'Create New Teacher Account'}
+        subtitle={
+          isRtl
+            ? 'حصرياً للمشرف العام — يتم إنشاء الحساب بدور معلم (Teacher) فقط'
+            : 'Super Admin only — provisions an active account strictly with role "teacher"'
+        }
+        maxWidth="md"
+      >
+        <form onSubmit={handleCreateTeacherSubmit} className="space-y-4 text-xs">
+          {Boolean(createTeacherError) && (
+            <ErrorState error={createTeacherError} isRtl={isRtl} variant="banner" />
+          )}
+
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 leading-relaxed">
+            {isRtl
+              ? 'يُمنح الحساب الجديد صلاحية معلم (Teacher) نشطة لتسجيل الدخول عبر البريد الإلكتروني وكلمة المرور، وتُوثّق العملية تلقائياً في سجل التدقيق دون حفظ كلمة المرور.'
+              : 'The account will be created with active "teacher" role for email/password login and recorded in the Super Admin audit trail (passwords are never logged).'}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                {isRtl ? 'الاسم الكامل (بالإنجليزية أو العام) *' : 'Full Name *'}
+              </label>
+              <input
+                type="text"
+                required
+                minLength={2}
+                maxLength={150}
+                value={teacherFullName}
+                onChange={(e) => setTeacherFullName(e.target.value)}
+                placeholder={isRtl ? 'مثال: Ahmed Al-Qahtani' : 'e.g. Ahmed Al-Qahtani'}
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                {isRtl ? 'الاسم بالعربية (اختياري)' : 'Arabic Full Name (optional)'}
+              </label>
+              <input
+                type="text"
+                dir="rtl"
+                maxLength={150}
+                value={teacherFullNameArabic}
+                onChange={(e) => setTeacherFullNameArabic(e.target.value)}
+                placeholder={isRtl ? 'مثال: أ. أحمد القحطاني' : 'أ. أحمد القحطاني'}
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                {isRtl ? 'البريد الإلكتروني المهني *' : 'Email Address *'}
+              </label>
+              <input
+                type="email"
+                dir="ltr"
+                required
+                maxLength={254}
+                autoComplete="off"
+                value={teacherEmail}
+                onChange={(e) => setTeacherEmail(e.target.value)}
+                placeholder="teacher@wessam-academy.com"
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                {isRtl ? 'رقم الجوال (اختياري)' : 'Phone Number (optional)'}
+              </label>
+              <input
+                type="tel"
+                dir="ltr"
+                maxLength={30}
+                value={teacherPhone}
+                onChange={(e) => setTeacherPhone(e.target.value)}
+                placeholder="+966 5X XXX XXXX"
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                {isRtl ? 'كلمة المرور الأولية *' : 'Initial Password *'}
+              </label>
+              <div className="relative">
+                <input
+                  type={showTeacherPassword ? 'text' : 'password'}
+                  dir="ltr"
+                  required
+                  minLength={8}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  value={teacherPassword}
+                  onChange={(e) => setTeacherPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full py-2 px-3 border border-slate-200 rounded-lg pe-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTeacherPassword((v) => !v)}
+                  className="absolute inset-y-0 end-2 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                  aria-label={showTeacherPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showTeacherPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {isRtl ? '8 أحرف على الأقل' : 'At least 8 characters'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                {isRtl ? 'تأكيد كلمة المرور *' : 'Confirm Password *'}
+              </label>
+              <input
+                type={showTeacherPassword ? 'text' : 'password'}
+                dir="ltr"
+                required
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
+                value={teacherConfirmPassword}
+                onChange={(e) => setTeacherConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={createTeacherSubmitting}
+              onClick={() => {
+                resetCreateTeacherForm();
+                setIsCreateTeacherOpen(false);
+              }}
+            >
+              {isRtl ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              isLoading={createTeacherSubmitting}
+              icon={<UserPlus className="w-3.5 h-3.5" />}
+            >
+              {isRtl ? 'إنشاء حساب المعلم' : 'Create Teacher Account'}
             </Button>
           </div>
         </form>

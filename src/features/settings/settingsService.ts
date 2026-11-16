@@ -97,11 +97,30 @@ export interface StaffAccountRecord {
   id: string;
   fullName: string;
   fullNameArabic: string;
+  email?: string | null;
   role: 'super_admin' | 'teacher';
   status: 'active' | 'inactive' | 'suspended';
   phone: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateTeacherPayload {
+  fullName: string;
+  fullNameArabic?: string;
+  email: string;
+  phone?: string;
+  password: string;
+}
+
+export interface CreateTeacherResult {
+  success: boolean;
+  teacherId: string;
+  email: string;
+  fullName: string;
+  fullNameArabic: string;
+  role: 'teacher';
+  status: 'active';
 }
 
 export interface StaffGovernanceDirectory {
@@ -447,6 +466,7 @@ export async function fetchStaffAccessDirectory(): Promise<StaffGovernanceDirect
           id: a.id,
           fullName: a.full_name,
           fullNameArabic: a.full_name_arabic || a.full_name,
+          email: a.email || null,
           role: a.role,
           status: a.status,
           phone: a.phone || null,
@@ -547,4 +567,222 @@ export async function fetchSettingsAuditLogs(limit = 30, offset = 0): Promise<Se
     newData: r.new_data || null,
     createdAt: r.created_at,
   }));
+}
+
+const TEACHER_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export function validateCreateTeacherInput(
+  input: CreateTeacherPayload,
+  confirmPassword?: string,
+  isRtl = true
+): string | null {
+  const fullName = String(input.fullName || '').trim();
+  if (fullName.length < 2 || fullName.length > 150) {
+    return isRtl
+      ? 'يرجى إدخال اسم المعلم الكامل (بين حرفين و150 حرفاً).'
+      : 'Please enter the teacher full name (2–150 characters).';
+  }
+
+  const arabicName = String(input.fullNameArabic || '').trim();
+  if (arabicName.length > 0 && (arabicName.length < 2 || arabicName.length > 150)) {
+    return isRtl
+      ? 'الاسم العربي يجب أن يكون بين حرفين و150 حرفاً.'
+      : 'Arabic full name must be between 2 and 150 characters when provided.';
+  }
+
+  const normalizedEmail = String(input.email || '').trim().toLowerCase();
+  if (!normalizedEmail || normalizedEmail.length > 254 || !TEACHER_EMAIL_REGEX.test(normalizedEmail)) {
+    return isRtl
+      ? 'يرجى إدخال بريد إلكتروني صحيح للمعلم.'
+      : 'Please enter a valid email address for the teacher.';
+  }
+  if (normalizedEmail.endsWith('@student.wessam-academy.internal')) {
+    return isRtl
+      ? 'لا يمكن استخدام نطاق بريد الطلاب الداخلي لحسابات المعلمين.'
+      : 'Student internal domain emails cannot be used for teacher accounts.';
+  }
+
+  const phone = String(input.phone || '').trim();
+  if (phone.length > 30) {
+    return isRtl
+      ? 'رقم الهاتف يجب ألا يتجاوز 30 حرفاً.'
+      : 'Phone number must not exceed 30 characters.';
+  }
+
+  const password = String(input.password || '');
+  if (password.length < 8 || password.length > 128 || password.trim().length < 8) {
+    return isRtl
+      ? 'يجب أن تتكون كلمة المرور الأولية من 8 أحرف فعلية على الأقل.'
+      : 'Initial password must contain at least 8 non-whitespace characters.';
+  }
+
+  if (confirmPassword !== undefined && password !== confirmPassword) {
+    return isRtl ? 'كلمتا المرور غير متطابقتين.' : 'Passwords do not match.';
+  }
+
+  return null;
+}
+
+async function parseEdgeFunctionErrorBody(err: unknown): Promise<{
+  status?: number;
+  message?: string;
+  code?: string;
+}> {
+  if (!err || typeof err !== 'object') return {};
+  const record = err as Record<string, any>;
+  const ctx = record.context;
+  if (ctx && typeof ctx === 'object') {
+    const status = typeof ctx.status === 'number' ? ctx.status : undefined;
+    if (typeof ctx.json === 'function') {
+      try {
+        const cloned = typeof ctx.clone === 'function' ? ctx.clone() : ctx;
+        const body = await cloned.json();
+        if (body && typeof body === 'object') {
+          return {
+            status,
+            message: typeof body.error === 'string' ? body.error : undefined,
+            code: typeof body.code === 'string' ? body.code : undefined,
+          };
+        }
+      } catch {
+        // Fall through to status-only or raw error info
+      }
+    }
+    return { status };
+  }
+  return {
+    status: typeof record.status === 'number' ? record.status : undefined,
+    message: typeof record.message === 'string' ? record.message : undefined,
+    code: typeof record.code === 'string' ? record.code : undefined,
+  };
+}
+
+export async function createTeacherAccount(
+  payload: CreateTeacherPayload,
+  clientOverride?: Parameters<typeof requireSupabaseClient>[1]
+): Promise<CreateTeacherResult> {
+  const validationError = validateCreateTeacherInput(payload, undefined, false);
+  if (validationError) {
+    throw new ServiceError({
+      category: 'VALIDATION_ERROR',
+      message: validationError,
+      service: SERVICE,
+      operation: 'createTeacherAccount',
+    });
+  }
+
+  const client = requireSupabaseClient(
+    {
+      service: SERVICE,
+      operation: 'createTeacherAccount',
+    },
+    clientOverride
+  );
+  await requireAuthenticatedUser(client, {
+    service: SERVICE,
+    operation: 'createTeacherAccount',
+  });
+
+  // Never send role, actorId, or status overrides from the client.
+  const requestBody = {
+    fullName: payload.fullName.trim(),
+    fullNameArabic: payload.fullNameArabic?.trim() || undefined,
+    email: payload.email.trim().toLowerCase(),
+    phone: payload.phone?.trim() || undefined,
+    password: payload.password,
+  };
+
+  let res: { data: any; error: any };
+  try {
+    res = await client.functions.invoke('create-teacher', {
+      body: requestBody,
+    });
+  } catch (err) {
+    throwServiceError(err, {
+      service: SERVICE,
+      operation: 'createTeacherAccount',
+      fallbackMessage: 'Failed to invoke teacher provisioning service.',
+    });
+  }
+
+  if (res.error) {
+    const parsed = await parseEdgeFunctionErrorBody(res.error);
+    const status = parsed.status;
+    const msg = parsed.message || (typeof res.error?.message === 'string' ? res.error.message : '');
+
+    if (status === 401) {
+      throw new ServiceError({
+        category: 'AUTHENTICATION_ERROR',
+        message: msg || 'Authentication session expired or missing.',
+        service: SERVICE,
+        operation: 'createTeacherAccount',
+        code: parsed.code || 'UNAUTHENTICATED',
+        status,
+        originalError: res.error,
+      });
+    }
+
+    if (status === 403 || parsed.code?.startsWith('FORBIDDEN')) {
+      throw new ServiceError({
+        category: 'AUTHORIZATION_ERROR',
+        message: msg || 'Only Super Admins can create teacher accounts.',
+        service: SERVICE,
+        operation: 'createTeacherAccount',
+        code: parsed.code || 'FORBIDDEN_SUPER_ADMIN_ONLY',
+        status: status || 403,
+        originalError: res.error,
+      });
+    }
+
+    if (status === 409 || parsed.code === 'EMAIL_ALREADY_EXISTS') {
+      throw new ServiceError({
+        category: 'VALIDATION_ERROR',
+        message: 'An account with this email already exists.',
+        service: SERVICE,
+        operation: 'createTeacherAccount',
+        code: 'EMAIL_ALREADY_EXISTS',
+        status: 409,
+        originalError: res.error,
+      });
+    }
+
+    if (status === 400 || status === 422) {
+      throw new ServiceError({
+        category: 'VALIDATION_ERROR',
+        message: msg || 'Invalid teacher account details.',
+        service: SERVICE,
+        operation: 'createTeacherAccount',
+        code: parsed.code,
+        status,
+        originalError: res.error,
+      });
+    }
+
+    throwServiceError(res.error, {
+      service: SERVICE,
+      operation: 'createTeacherAccount',
+      fallbackMessage: msg || 'Failed to create teacher account.',
+    });
+  }
+
+  if (res.data?.error) {
+    throw new ServiceError({
+      category: 'VALIDATION_ERROR',
+      message: String(res.data.error),
+      service: SERVICE,
+      operation: 'createTeacherAccount',
+      code: typeof res.data.code === 'string' ? res.data.code : undefined,
+    });
+  }
+
+  if (!res.data || !res.data.teacherId || res.data.role !== 'teacher') {
+    throw new ServiceError({
+      category: 'DATABASE_ERROR',
+      message: 'Teacher provisioning service returned an invalid response.',
+      service: SERVICE,
+      operation: 'createTeacherAccount',
+    });
+  }
+
+  return res.data as CreateTeacherResult;
 }
