@@ -16,7 +16,7 @@
 -- ==============================================================================
 
 BEGIN;
-SELECT plan(34);
+SELECT plan(37);
 
 -- Setup synthetic test users
 DO $$
@@ -313,6 +313,27 @@ SELECT throws_ok(
     '22023',
     NULL,
     'Unsupported staff role is rejected with SQLSTATE 22023'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, '', 'active', 'empty role') $$,
+    '22023',
+    NULL,
+    'Empty string staff role is rejected with SQLSTATE 22023'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, '   ', 'active', 'whitespace role') $$,
+    '22023',
+    NULL,
+    'Whitespace-only staff role is rejected with SQLSTATE 22023'
+);
+
+SELECT throws_ok(
+    $$ SELECT public.update_staff_account_access('11111111-1111-4111-8111-111111111102'::uuid, NULL, 'active', 'null role') $$,
+    '22023',
+    NULL,
+    'NULL staff role is rejected with SQLSTATE 22023'
 );
 
 -- 15f. Student accounts cannot be promoted directly via staff access governance
