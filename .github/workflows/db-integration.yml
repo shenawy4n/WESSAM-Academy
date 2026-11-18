@@ -99,6 +99,7 @@ jobs:
           fi
           DB_URL="$DB_URL" bash supabase/tests/database/group_management_concurrency.sh
           DB_URL="$DB_URL" bash supabase/tests/database/super_admin_concurrency.sh
+          DB_URL="$DB_URL" bash supabase/tests/database/submission_concurrency.sh
 
       - name: Stop disposable Supabase stack
         if: always()

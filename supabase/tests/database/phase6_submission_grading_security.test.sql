@@ -18,12 +18,14 @@
 --     record visibility (NULL while unreleased, numeric score once released)
 --  F. Effective PostgreSQL privilege assertions (has_table_privilege &
 --     has_function_privilege) for anon and authenticated
+--  G. Attachment JSON validation (Migration 29): valid arrays, SQL NULL
+--     normalization, and SQLSTATE 22023 rejection for non-array JSONB values
 -- ==============================================================================
 
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(63);
+SELECT extensions.plan(72);
 
 -- ------------------------------------------------------------------------------
 -- Deterministic Isolated Test Fixtures (executed as table owner/postgres)
@@ -45,6 +47,7 @@ DECLARE
 
     v_assign_a         UUID := '88888888-0003-4000-8000-000000000001';
     v_assign_b         UUID := '88888888-0003-4000-8000-000000000002';
+    v_assign_att       UUID := '88888888-0003-4000-8000-000000000003';
 
     v_sub_seed         UUID := '88888888-0004-4000-8000-000000000001';
     v_hist_seed        UUID := '88888888-0005-4000-8000-000000000001';
@@ -101,13 +104,15 @@ BEGIN
         id, teacher_id, course_id, title, title_arabic, instructions,
         due_date, max_score, max_attempts, target_group_id, is_published, status
     ) VALUES
-        (v_assign_a, v_teacher_a, v_course_a, 'M28 Assign A', 'واجب أ ٢٨', 'Essay A', now() + interval '7 days', 100, 2, v_group_a, true, 'published'),
-        (v_assign_b, v_teacher_a, v_course_b, 'M28 Assign B', 'واجب ب ٢٨', 'Essay B', now() + interval '7 days', 100, 2, v_group_b, true, 'published')
+        (v_assign_a,   v_teacher_a, v_course_a, 'M28 Assign A',   'واجب أ ٢٨',   'Essay A',   now() + interval '7 days', 100, 2, v_group_a, true, 'published'),
+        (v_assign_b,   v_teacher_a, v_course_b, 'M28 Assign B',   'واجب ب ٢٨',   'Essay B',   now() + interval '7 days', 100, 2, v_group_b, true, 'published'),
+        (v_assign_att, v_teacher_a, v_course_a, 'M29 Assign Att', 'واجب مرفقات ٢٩', 'Essay Att', now() + interval '7 days', 100, 5, v_group_a, true, 'published')
     ON CONFLICT (id) DO NOTHING;
 
     INSERT INTO public.assignment_targets (assignment_id, target_type, group_id) VALUES
-        (v_assign_a, 'group', v_group_a),
-        (v_assign_b, 'group', v_group_b)
+        (v_assign_a,   'group', v_group_a),
+        (v_assign_b,   'group', v_group_b),
+        (v_assign_att, 'group', v_group_a)
     ON CONFLICT DO NOTHING;
 
     -- Seed a pre-existing unreleased graded submission for Student 2 on Assign B
@@ -581,6 +586,75 @@ SELECT extensions.is(pg_catalog.has_function_privilege('anon', 'public.submit_as
 SELECT extensions.is(pg_catalog.has_function_privilege('anon', 'public.grade_assignment_submission(uuid, numeric, text, text, jsonb, boolean, text)', 'EXECUTE'), false, 'F16: anon lacks EXECUTE on grade_assignment_submission');
 SELECT extensions.is(pg_catalog.has_function_privilege('authenticated', 'public.submit_assignment(uuid, text, jsonb, text)', 'EXECUTE'), true, 'F17: authenticated has EXECUTE on submit_assignment');
 SELECT extensions.is(pg_catalog.has_function_privilege('authenticated', 'public.grade_assignment_submission(uuid, numeric, text, text, jsonb, boolean, text)', 'EXECUTE'), true, 'F18: authenticated has EXECUTE on grade_assignment_submission');
+
+-- ==============================================================================
+-- G. ATTACHMENT JSON VALIDATION (MIGRATION 29)
+-- ==============================================================================
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" = '{"sub":"77777777-0001-4000-8000-000000000004","role":"authenticated"}';
+SELECT set_config('request.jwt.claim.sub', '77777777-0001-4000-8000-000000000004', true);
+
+SELECT extensions.throws_ok(
+    $$ SELECT public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'Object payload', '{"name":"bad.pdf"}'::jsonb, NULL) $$,
+    '22023',
+    NULL,
+    'G1: submit_assignment rejects JSON object p_attachments with SQLSTATE 22023'
+);
+
+SELECT extensions.throws_ok(
+    $$ SELECT public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'String payload', '"bad.pdf"'::jsonb, NULL) $$,
+    '22023',
+    NULL,
+    'G2: submit_assignment rejects JSON string p_attachments with SQLSTATE 22023'
+);
+
+SELECT extensions.throws_ok(
+    $$ SELECT public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'Number payload', '42'::jsonb, NULL) $$,
+    '22023',
+    NULL,
+    'G3: submit_assignment rejects JSON number scalar p_attachments with SQLSTATE 22023'
+);
+
+SELECT extensions.throws_ok(
+    $$ SELECT public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'Boolean payload', 'true'::jsonb, NULL) $$,
+    '22023',
+    NULL,
+    'G4: submit_assignment rejects JSON boolean scalar p_attachments with SQLSTATE 22023'
+);
+
+SELECT extensions.throws_ok(
+    $$ SELECT public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'JSON null payload', 'null'::jsonb, NULL) $$,
+    '22023',
+    NULL,
+    'G5: submit_assignment rejects JSON null scalar p_attachments with SQLSTATE 22023'
+);
+
+SELECT extensions.lives_ok(
+    $$ SELECT public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'Empty array payload', '[]'::jsonb, NULL) $$,
+    'G6: submit_assignment accepts valid empty JSON array'
+);
+
+SELECT extensions.lives_ok(
+    $$ SELECT public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'Non-empty array payload', '[{"name":"doc.pdf","url":"https://storage.local/doc.pdf","size":512}]'::jsonb, NULL) $$,
+    'G7: submit_assignment accepts valid non-empty JSON array'
+);
+
+SELECT extensions.lives_ok(
+    $$
+    SELECT set_config(
+        'test.m29_null_sub_id',
+        (public.submit_assignment('88888888-0003-4000-8000-000000000003'::uuid, 'SQL NULL payload', NULL::jsonb, NULL)->>'submission_id'),
+        true
+    );
+    $$,
+    'G8: submit_assignment accepts SQL NULL p_attachments and normalizes cleanly'
+);
+
+SELECT extensions.is(
+    (SELECT attachments FROM public.submissions WHERE id = current_setting('test.m29_null_sub_id')::uuid),
+    '[]'::jsonb,
+    'G9: SQL NULL p_attachments is stored normalized as empty JSON array'
+);
 
 SELECT * FROM extensions.finish();
 ROLLBACK;

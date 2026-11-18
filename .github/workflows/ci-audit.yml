@@ -91,10 +91,22 @@ jobs:
             20261116000024_super_admin_teacher_provisioning.sql \
             20261116000025_remediate_schema_triggers_and_rpc_compatibility.sql \
             20261116000026_remediate_database_integration_regressions.sql \
-            20261116000027_fix_staff_account_status_enum.sql
+            20261116000027_fix_staff_account_status_enum.sql \
+            20261118000028_harden_submission_grading_integrity.sql \
+            20261118000029_harden_submission_attachments_validation.sql
           do
             test -f "supabase/migrations/$migration" || {
               echo "::error::Missing migration: $migration"
+              exit 1
+            }
+          done
+
+          for dbtest in \
+            phase6_submission_grading_security.test.sql \
+            submission_concurrency.sh
+          do
+            test -f "supabase/tests/database/$dbtest" || {
+              echo "::error::Missing database test: $dbtest"
               exit 1
             }
           done
