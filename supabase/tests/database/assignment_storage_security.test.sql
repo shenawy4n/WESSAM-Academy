@@ -112,6 +112,19 @@ BEGIN
         (v_assign_2_pub,   'group', v_group_2)
     ON CONFLICT DO NOTHING;
 
+    -- Deterministically remove only previously seeded fixture objects before inserting
+    DELETE FROM storage.objects
+    WHERE bucket_id = 'assignment-files'
+      AND name IN (
+          'attachments/66666666-0004-4000-8000-000000000001/1000_guide1.pdf',
+          'attachments/66666666-0004-4000-8000-000000000002/1000_draft1.pdf',
+          'attachments/66666666-0004-4000-8000-000000000003/1000_guide2.pdf',
+          'attachments/drafts/66666666-0001-4000-8000-000000000003/1000_t1_draft.pdf',
+          'submissions/66666666-0004-4000-8000-000000000001/66666666-0001-4000-8000-000000000006/1000_s1_work.pdf',
+          'submissions/66666666-0004-4000-8000-000000000003/66666666-0001-4000-8000-000000000007/1000_s2_work.pdf',
+          'submissions/66666666-0004-4000-8000-000000000001/66666666-0001-4000-8000-000000000008/1000_inactive_work.pdf'
+      );
+
     -- Seed storage objects across attachments, drafts, and submissions
     INSERT INTO storage.objects (bucket_id, name, owner) VALUES
         ('assignment-files', 'attachments/66666666-0004-4000-8000-000000000001/1000_guide1.pdf', v_teacher_1),
@@ -120,8 +133,7 @@ BEGIN
         ('assignment-files', 'attachments/drafts/66666666-0001-4000-8000-000000000003/1000_t1_draft.pdf', v_teacher_1),
         ('assignment-files', 'submissions/66666666-0004-4000-8000-000000000001/66666666-0001-4000-8000-000000000006/1000_s1_work.pdf', v_student_1),
         ('assignment-files', 'submissions/66666666-0004-4000-8000-000000000003/66666666-0001-4000-8000-000000000007/1000_s2_work.pdf', v_student_2),
-        ('assignment-files', 'submissions/66666666-0004-4000-8000-000000000001/66666666-0001-4000-8000-000000000008/1000_inactive_work.pdf', v_student_inactive)
-    ON CONFLICT (bucket_id, name) DO NOTHING;
+        ('assignment-files', 'submissions/66666666-0004-4000-8000-000000000001/66666666-0001-4000-8000-000000000008/1000_inactive_work.pdf', v_student_inactive);
 END $$;
 
 -- ------------------------------------------------------------------------------
