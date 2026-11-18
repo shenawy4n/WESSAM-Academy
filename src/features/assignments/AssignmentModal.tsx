@@ -252,7 +252,7 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
       const uploaded = await uploadAssignmentFile(
         file,
         'attachments',
-        assignmentToEdit?.id || 'temp_' + Date.now()
+        assignmentToEdit?.id || 'draft'
       );
       setAttachments((prev) => [...prev, uploaded]);
     } catch (err: any) {

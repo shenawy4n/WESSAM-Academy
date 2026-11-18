@@ -886,6 +886,83 @@ export async function fetchGradingHistory(
   }));
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value?: string | null): boolean {
+  return Boolean(value && UUID_REGEX.test(value.trim()));
+}
+
+/**
+ * Builds an RLS-compliant storage object path inside the private 'assignment-files' bucket:
+ *  - attachments/<assignment_uuid>/<timestamp>_<filename>
+ *  - attachments/drafts/<uploader_uuid>/<timestamp>_<filename>
+ *  - submissions/<assignment_uuid>/<student_uuid>/<timestamp>_<filename>
+ */
+export function buildAssignmentStoragePath(params: {
+  folder: 'attachments' | 'submissions';
+  fileName: string;
+  contextId: string;
+  studentId?: string;
+  uploaderId?: string;
+  timestamp?: number;
+}): string {
+  const cleanBase = (params.fileName || 'file')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/\.{2,}/g, '_');
+  const cleanName = cleanBase && !/^\.+$/.test(cleanBase) ? cleanBase : 'file';
+  const timestamp = params.timestamp ?? Date.now();
+  const contextId = (params.contextId || '').trim();
+
+  if (params.folder === 'submissions') {
+    if (!isUuid(contextId)) {
+      throw new ServiceError({
+        category: 'VALIDATION_ERROR',
+        message: 'A valid assignment UUID is required for submission file uploads.',
+        service: SERVICE,
+        operation: 'buildAssignmentStoragePath',
+        code: 'INVALID_ASSIGNMENT_ID',
+      });
+    }
+    const studentId = params.studentId?.trim() || '';
+    if (!isUuid(studentId)) {
+      throw new ServiceError({
+        category: 'VALIDATION_ERROR',
+        message: 'An authenticated student UUID is required for submission file uploads.',
+        service: SERVICE,
+        operation: 'buildAssignmentStoragePath',
+        code: 'INVALID_STUDENT_ID',
+      });
+    }
+    return `submissions/${contextId}/${studentId}/${timestamp}_${cleanName}`;
+  }
+
+  if (isUuid(contextId)) {
+    return `attachments/${contextId}/${timestamp}_${cleanName}`;
+  }
+
+  if (contextId === 'draft' || contextId.startsWith('temp_')) {
+    const uploaderId = params.uploaderId?.trim() || '';
+    if (!isUuid(uploaderId)) {
+      throw new ServiceError({
+        category: 'VALIDATION_ERROR',
+        message: 'An authenticated uploader UUID is required for draft attachment uploads.',
+        service: SERVICE,
+        operation: 'buildAssignmentStoragePath',
+        code: 'INVALID_UPLOADER_ID',
+      });
+    }
+    return `attachments/drafts/${uploaderId}/${timestamp}_${cleanName}`;
+  }
+
+  throw new ServiceError({
+    category: 'VALIDATION_ERROR',
+    message: 'A valid assignment UUID or draft context is required for attachment uploads.',
+    service: SERVICE,
+    operation: 'buildAssignmentStoragePath',
+    code: 'INVALID_CONTEXT_ID',
+  });
+}
+
 /**
  * Uploads a file to private 'assignment-files' bucket.
  */
@@ -900,12 +977,32 @@ export async function uploadAssignmentFile(
     operation: 'uploadAssignmentFile',
   });
 
-  const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const timestamp = Date.now();
-  const filePath =
-    folder === 'attachments'
-      ? `attachments/${contextId}/${timestamp}_${cleanName}`
-      : `submissions/${contextId}/${studentId || 'me'}/${timestamp}_${cleanName}`;
+  let resolvedStudentId = studentId;
+  let resolvedUploaderId: string | undefined;
+
+  if (folder === 'submissions') {
+    if (!resolvedStudentId || resolvedStudentId === 'me') {
+      const user = await requireAuthenticatedUser(client, {
+        service: SERVICE,
+        operation: 'uploadAssignmentFile',
+      });
+      resolvedStudentId = user.id;
+    }
+  } else if (!isUuid(contextId) && (contextId === 'draft' || contextId.startsWith('temp_'))) {
+    const user = await requireAuthenticatedUser(client, {
+      service: SERVICE,
+      operation: 'uploadAssignmentFile',
+    });
+    resolvedUploaderId = user.id;
+  }
+
+  const filePath = buildAssignmentStoragePath({
+    folder,
+    fileName: file.name,
+    contextId,
+    studentId: resolvedStudentId,
+    uploaderId: resolvedUploaderId,
+  });
 
   let uploadRes;
   try {
